@@ -76,37 +76,35 @@
 
 ---
 
-## Screenshots
+<h3>Login & Register</h3>
+<p align="center">
+  <img src="https://i.ibb.co.com/tpBpZCk2/Login-Page.jpg" alt="Login Page" width="200"/>
+  <img src="https://i.ibb.co.com/CKxzP6F9/Register-Page.jpg" alt="Register Page" width="200"/>
+</p>
 
-   
-   ### Login Page
-   <img src="https://i.ibb.co.com/tpBpZCk2/Login-Page.jpg" alt="Login Page" border="0">
+<h3>Home & Blood Requests</h3>
+<p align="center">
+  <img src="https://i.ibb.co.com/ksYkCJDL/Home-Page.jpg" alt="Home Page" width="200"/>
+  <img src="https://i.ibb.co.com/m5MC3WkQ/Blood-Requests.jpg" alt="Blood Requests" width="200"/>
+</p>
 
-   ### Register Page
-   <img src="https://i.ibb.co.com/CKxzP6F9/Register-Page.jpg" alt="Register Page" border="0">
-   
-   ### Home Screen
-   <img src="https://i.ibb.co.com/ksYkCJDL/Home-Page.jpg" alt="Home Page" border="0">
+<h3>Create Request & Map View</h3>
+<p align="center">
+  <img src="https://i.ibb.co.com/FLKtcr4k/Create-Blood-Request-Form.jpg" alt="Create Blood Request Form" width="200"/>
+  <img src="https://i.ibb.co.com/LdWYdFpx/Nearby-Map.jpg" alt="Nearby Map" width="200"/>
+</p>
 
-   ### Blood Request Form
-   <img src="https://i.ibb.co.com/m5MC3WkQ/Blood-Requests.jpg" alt="Blood Requests" border="0">
+<h3>Profile & Edit Profile</h3>
+<p align="center">
+  <img src="https://i.ibb.co.com/7tGMTdg3/Profile-Page.jpg" alt="Profile Page" width="200"/>
+  <img src="https://i.ibb.co.com/C5NSKsdV/Edit-Profile.jpg" alt="Edit Profile" width="200"/>
+</p>
 
-   ### Create Blood Request
-   <img src="https://i.ibb.co.com/FLKtcr4k/Create-Blood-Request-Form.jpg" alt="Create Blood Request Form" border="0">
-   
-   ### Map View
-   <img src="https://i.ibb.co.com/LdWYdFpx/Nearby-Map.jpg" alt="Nearby Map" border="0">
+<h3>Learn & Aware</h3>
+<p align="center">
+  <img src="https://i.ibb.co.com/mCF6rJW1/photo-2-2025-04-14-13-58-56.jpg" alt="Learn Aware Page" width="200"/>
+</p>
 
-   ### Profile Page
-   <img src="https://i.ibb.co.com/7tGMTdg3/Profile-Page.jpg" alt="Profile Page" border="0">
-
-   ### Edit Profile
-   <img src="https://i.ibb.co.com/C5NSKsdV/Edit-Profile.jpg" alt="Edit Profile" border="0">
-  
-   ### Learn Aware Page
-   <img src="https://i.ibb.co.com/mCF6rJW1/photo-2-2025-04-14-13-58-56.jpg" alt="Learn Aware Page" border="0">
-
-   ### 
 
 ## Technology Stack
 
