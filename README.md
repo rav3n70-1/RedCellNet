@@ -1,120 +1,214 @@
 # RedCellNet - Blood Donation Network App
 
 <p align="center">
-    </p>
+  <img src="path/to/your-logo.png" alt="RedCellNet Logo" width="200"/>
+</p>
 
 <p align="center">
-  <strong>Connecting blood donors and recipients quickly and efficiently.</strong>
+  <strong>Connecting blood donors and recipients quickly and efficiently.</strong>
 </p>
 
 ---
 
 ## Overview
 
-RedCellNet is a mobile application built with Flutter and Firebase designed to streamline the process of blood donation. It allows users to request blood in emergencies, view nearby requests and donation centers, and enables potential donors to offer help, fostering a connected community focused on saving lives.
+**RedCellNet** is a mobile application built with Flutter and Firebase designed to streamline the blood donation process. The app allows users to request blood during emergencies, view nearby blood requests and donation centers, and offer help as a donor—all aimed at building a connected community focused on saving lives.
 
-## ✨ Features
+---
 
-* **User Authentication:** Secure login and registration using Email/Password and Google Sign-In.
-* **User Profiles:** Manage personal details, blood type, contact information, and donation availability status. Points and badges earned are displayed.
-* **Profile Editing:** Update profile information easily.
-* **Blood Report OCR:** Scan blood reports using ML Kit Text Recognition to automatically detect and suggest blood types during profile editing.
-* **Blood Requests:**
-    * Create detailed blood requests (patient info, required type, units, urgency, hospital, contact). Geocoding for coordinates attempted.
-    * View a list of all open requests ("All Open" tab).
-    * View a filtered list of requests created by the logged-in user ("My Requests" tab).
-    * Filter open requests by Blood Group and Urgency Level.
-    * View request details.
-    * Delete own blood requests.
-* **Donation Offers & Connection:**
-    * Compatible, available donors can "Offer Help" on requests.
-    * Requesters can view pending offers on their requests.
-    * Requesters can **Accept** or **Reject** offers. Accepting fulfills the request and auto-rejects other pending offers.
-    * Requesters can view the accepted donor's name and contact information after accepting an offer.
-    * _(TODO: Donor view of their offer status and requester contact info)_
-* **Nearby Map:** Visualize locations of open blood requests and registered donation centers (requires Google Maps setup & API key).
-* **Donation Centers:** View registered donation centers (fetched from Firestore) on the map.
-* **Educational Content:** Browse articles and tips related to blood donation ("Learn & Aware" section).
-* **Rewards System:** Gamification through points and achievement badges.
-    * **Points:** Earn points for actions like completing profile and reading educational content. View total points on the profile.
-    * **Badges:** Earn badges based on achievements. Current badges include:
-        * **First Drop** (`Icons.water_drop_outlined`): Awarded after the user records their first successful blood donation. _(Logic TBD)_
-        * **High Five** (`Icons.thumb_up_alt_outlined`): Awarded after completing 5 donations. _(Logic TBD)_
-        * **Double Digits** (`Icons.filter_alt_outlined`): Awarded after completing 10 donations. _(Logic TBD)_
-        * **Rare Hero** (`Icons.star_outline`): Awarded for donating a rare blood type (e.g., AB-, O-). _(Logic TBD)_
-        * **Crisis Warrior** (`Icons.local_fire_department_outlined`): Awarded for donating during an emergency/disaster mode. _(Logic TBD)_
-        * **Lifesaver Buddy** (`Icons.group_add_outlined`): Awarded for referring new donors. _(Logic TBD)_
-        * **Health Aware** (`Icons.school_outlined`): Awarded after reading a certain number of educational articles. _(Points awarded, badge TBD)_
-        * **Profile Complete** (`Icons.check_circle_outline`): Awarded when Name, Blood Type, City/Area are filled. **(Logic Implemented!)**
-        * **Standby Guardian** (`Icons.shield_outlined`): Awarded for consistently being available to donate. _(Logic TBD)_
-        * **Legend Donor** (`Icons.emoji_events_outlined`): Awarded after a significant number of donations. _(Logic TBD)_
-* **Push Notifications (FCM):**
-    * Receive notifications (setup for foreground, background, terminated states).
-    * Tap notifications to navigate directly to relevant request details.
-    * _(TODO: Cloud Function required for server-side sending of notifications)._
+## Features
 
-## 🚀 Technology Stack
+- **User Authentication:**  
+  Secure login and registration using Email/Password and Google Sign-In.
 
-* **Framework:** Flutter (Cross-platform UI)
-* **Language:** Dart
-* **Backend & Database:** Firebase
-    * Firebase Authentication (Email/Password, Google Sign-In)
-    * Cloud Firestore (NoSQL Database)
-    * Firebase Cloud Messaging (Push Notifications - Client setup)
-* **Mapping & Geocoding:** Google Maps Platform
-    * `Maps_flutter` (Android/iOS Map Display)
-    * `Maps_apis` (Geocoding - requires billing/API key setup)
-* **Image & Text Recognition:**
-    * `image_picker` (Select images from gallery/camera for OCR)
-    * `google_mlkit_text_recognition` (On-device OCR)
-* **State Management:** Implicit (`StatefulWidget`, `StreamBuilder`, `FutureBuilder`)
-* **Other:**
-    * `intl` (Date/Time formatting)
-    * `flutter_local_notifications` (Displaying foreground FCM messages)
-    * `permission_handler` (Requesting location permissions)
-    * `geolocator` (Getting device location)
+- **User Profiles:**  
+  Manage personal details including blood type, contact information, donation availability status, and display earned points and badges.
 
-## 🛠️ Setup & Installation (for Developers)
+- **Profile Editing:**  
+  Easily update your profile information.
 
-1.  **Prerequisites:** Flutter SDK, Git, IDE, JDK.
-2.  **Clone Repository:** `git clone <your-repo-url>`
-3.  **Firebase Project Setup:**
-    * Create Firebase project.
-    * Register Android, iOS, Web apps.
-    * Download/place `google-services.json` (Android) & `GoogleService-Info.plist` (iOS). Ensure they are in `.gitignore`.
-    * Enable Authentication (Email/Pass, Google - configure SHA-1s & Web Client ID), Firestore (create database), Cloud Messaging.
-    * Publish Firestore Security Rules (use rules provided in conversation).
-    * Create required Firestore Indexes by running the app and clicking console links when errors appear (for filtering/ordering requests).
-4.  **API Keys & Configuration:**
-    * **Google Maps Platform:** Enable Maps SDKs & Geocoding API. **Enable Billing**. Create restricted API Key. Add key to `AndroidManifest.xml`, `AppDelegate.swift`, `web/index.html`. (See earlier steps for details).
-    * **(No ImgBB Key Needed)** - Profile pictures currently skipped.
-    * **Android Signing Key:** Generate upload key (`.jks`) using `keytool`. Create `android/key.properties` with credentials and correct path (use `/`). Add `key.properties` to `.gitignore`. Ensure `build.gradle.kts` is configured for release signing.
-5.  **Install Dependencies:** `flutter pub get`
-6.  **Run the App:** `flutter run`
+- **Blood Report OCR:**  
+  Scan blood reports using ML Kit Text Recognition, which automatically detects and suggests blood types during profile editing.
 
-## 🚀 Usage
+- **Blood Requests:**
+  - Create detailed requests including patient information, required blood type, units, urgency, hospital, and contact details.
+  - View all active requests under the **All Open** tab.
+  - Monitor your own requests via the **My Requests** tab.
+  - Filter requests by Blood Group and Urgency Level.
+  - View detailed request information.
+  - Delete your own requests.
 
-(Brief overview of how to use the main app features - Register/Login, View Home, Request Blood, View Requests/Map, Offer/Accept/Reject, View Profile/Badges, Learn Content etc.)
+- **Donation Offers & Connection:**
+  - Compatible and available donors can "Offer Help" on requests.
+  - Requesters can review pending offers on their requests.
+  - Option to **Accept** or **Reject** offers—accepting a donor auto-rejects the remaining pending offers.
+  - Access accepted donor’s name and contact information after an offer is accepted.
+  - _(TODO: Build view for donors to see the status of their offers and requesters' contact info)_
 
-## ⚠️ Known Issues & TODOs
+- **Nearby Map:**  
+  Visualize open blood requests and registered donation centers (requires Google Maps setup & API key).
 
-* **Google Maps Billing/API Key:** Geocoding API fails (`REQUEST_DENIED`) and map has watermark until billing/key setup is fully resolved in Google Cloud Console.
-* **Donor "Connect" View:** Donors cannot currently see their offer statuses or accepted requester contact info. A "My Offers" section is needed.
-* **Notifications (Sending):** Backend Cloud Function to send notifications is not yet deployed.
-* **Badge Logic:** Most badges are only displayed; logic for awarding them based on donations, etc., needs implementation.
-* **Donation History:** UI exists, but logic to record actual donations is needed.
-* **OCR Robustness:** Parsing logic works for tested formats but may fail on others.
-* **Contact Requester Button:** Placeholder, needs `url_launcher`.
-* **Localization:** Needs full review and implementation.
-* **Error Handling & Testing:** Needs improvement.
-* **Security:** Revisit rules, ensure no keys are hardcoded (use `flutter_dotenv` if needed), clean Git history if secrets were exposed.
+- **Donation Centers:**  
+  Locate registered donation centers (data fetched from Firestore) on an interactive map.
+
+- **Educational Content:**  
+  Browse informative articles and tips related to blood donation in the **Learn & Aware** section.
+
+- **Rewards System (Gamification):**
+  - **Points:** Earn points for activities such as completing your profile and reading educational content.
+  - **Badges:** Earn badges for various achievements. Current badges include:
+    - **First Drop:** Awarded upon recording your first successful donation.
+    - **High Five:** For completing five donations.
+    - **Double Digits:** For completing ten donations.
+    - **Rare Hero:** For donating a rare blood type (e.g., AB-, O-).
+    - **Crisis Warrior:** For donating during an emergency or disaster.
+    - **Lifesaver Buddy:** For referring new donors.
+    - **Health Aware:** For reading a set number of educational articles.
+    - **Profile Complete:** For filling in mandatory fields (Name, Blood Type, City/Area).
+    - **Standby Guardian:** For consistently being available to donate.
+    - **Legend Donor:** For a significant number of completed donations.  
+    _Note: Several badge logics are still under development._
+
+- **Push Notifications (FCM):**
+  - Receive notifications during foreground, background, and terminated app states.
+  - Tap notifications to navigate to relevant request details.
+  - _(TODO: Implement backend Cloud Function for sending notifications)_
+
+---
+
+## Screenshots
+
+Showcasing your app visually is essential to help users understand the interface and key features. Add screenshots by following these guidelines:
+
+1. **Prepare Screenshots:** Capture key screens such as the Home Screen, Blood Request Form, Donation Offers, and Map View.
+2. **Optimize Images:** Ensure images are optimized for web display.
+3. **Embed Images:** Use the Markdown image syntax to display screenshots within the README. For example:
+
+   ```markdown
+   ### Home Screen
+   ![App Home Screen](path/to/home_screen.png)
+
+   ### Blood Request Form
+   ![Blood Request Form](path/to/request_form.png)
+
+   ### Map View
+   ![Map with Requests and Centers](path/to/map_view.png)
+   ```
+
+4. **Update Paths:** Make sure to update the `path/to/your-image.png` with the correct path relative to the README file or hosted URL.
+
+---
+
+## Technology Stack
+
+- **Framework:** Flutter (Cross-platform UI)
+- **Language:** Dart
+- **Backend & Database:** Firebase
+  - **Firebase Authentication:** Email/Password, Google Sign-In
+  - **Cloud Firestore:** NoSQL Database
+  - **Firebase Cloud Messaging:** Push notifications
+- **Mapping & Geocoding:** Google Maps Platform
+  - `maps_flutter` for map display
+  - `maps_apis` for geocoding (requires billing/API key)
+- **Image & Text Recognition:**
+  - `image_picker` for selecting images (gallery/camera)
+  - `google_mlkit_text_recognition` for on-device OCR
+- **State Management:**  
+  Using implicit state management techniques (e.g., `StatefulWidget`, `StreamBuilder`, `FutureBuilder`)
+- **Other:**
+  - `intl` for date/time formatting
+  - `flutter_local_notifications` for foreground messages
+  - `permission_handler` for location access
+  - `geolocator` for obtaining device location
+
+---
+
+## Setup & Installation (Developers)
+
+1. **Prerequisites:**  
+   Install Flutter SDK, Git, IDE (e.g., VS Code or Android Studio), and JDK.
+
+2. **Clone Repository:**  
+   ```bash
+   git clone <your-repo-url>
+   ```
+
+3. **Firebase Project Setup:**  
+   - Create a Firebase project.
+   - Register Android, iOS, and Web apps.
+   - Download and place `google-services.json` (Android) & `GoogleService-Info.plist` (iOS) appropriately.  
+   - Enable Firebase Authentication (Email/Password, Google Sign-In), Firestore, and Cloud Messaging.
+   - Publish Firestore Security Rules and create required Firestore Indexes by following on-screen instructions.
+
+4. **Configure API Keys & Settings:**
+   - **Google Maps Platform:**  
+     Enable Maps SDKs & Geocoding API, enable billing, and add your restricted API key in the necessary files (`AndroidManifest.xml`, `AppDelegate.swift`, `web/index.html`).
+   - **Android Signing Key:**  
+     Generate an upload key (`.jks`), set up `android/key.properties`, and configure release signing in `build.gradle.kts`.
+
+5. **Install Dependencies:**  
+   ```bash
+   flutter pub get
+   ```
+
+6. **Run the App:**  
+   ```bash
+   flutter run
+   ```
+
+---
+
+## Usage
+
+Once the app is running, users can:
+
+- **Register/Login:** Access the app through secure authentication.
+- **Home Screen:** Navigate to see nearby blood requests and donation centers.
+- **Create/View Blood Requests:** Submit new blood requests and check active ones.
+- **Offer/Accept Donations:** Donors can offer help; requesters can review and accept offers.
+- **Manage Profile & Earn Rewards:** Update profile details, view points and badges, and read educational articles.
+
+---
+
+## Known Issues & TODOs
+
+- **Google Maps Billing/API Key:**  
+  The Geocoding API may fail with `REQUEST_DENIED` until billing is enabled.
+- **Donor “Connect” View:**  
+  Donors currently cannot track their offer statuses or view accepted requester information.
+- **Push Notifications:**  
+  Server-side Cloud Function for notifications is pending deployment.
+- **Badge Logic:**  
+  Badge award logic needs further implementation.
+- **Donation History:**  
+  UI exists; logic for tracking donations is still under development.
+- **OCR Robustness:**  
+  Parsing works with tested formats but could be improved for wider compatibility.
+- **Contact Requester Functionality:**  
+  Requires integration with `url_launcher` for contacting requesters.
+- **Localization:**  
+  Full localization review and implementation is pending.
+- **Error Handling & Testing:**  
+  Improvements needed in error handling and overall testing.
+- **Security:**  
+  Revisit Firebase rules and ensure no API keys or secrets are hardcoded (recommend using `flutter_dotenv`).
+
+---
 
 ## Contributing
 
-_(Optional: Add contribution guidelines)_
-Currently under development.
+Your contributions are welcome as we continue to develop the app. Please follow our contribution guidelines and submit pull requests for review.
+
+---
 
 ## License
 
-_(Optional: Add license like MIT)_
-Unlicensed.
+Copyright © 2025  
+Mehedi Hasan Rohan
+
+All rights reserved.  
+This source code is proprietary and confidential. Unauthorized copying, modification, distribution, or use of this code is strictly prohibited.
+
+---
+
+This updated README now clearly outlines the project’s features, tech stack, setup instructions, and includes a dedicated section for screenshots to help users understand the app visually. Adjust the image paths as necessary, and feel free to further refine any sections to better fit your evolving project needs.
