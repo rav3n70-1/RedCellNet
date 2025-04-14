@@ -164,10 +164,14 @@ RedCellNet is a mobile application built with Flutter and Firebase designed to s
 
 ## Contributing
 
-_(Optional: Add guidelines here if you plan to accept contributions from others)_
 This project is currently under personal development.
 
 ## License
 
-_(Optional: Choose and add a license file, e.g., MIT)_
-This project is currently unlicensed.
+
+Copyright 2025 Mehedi Hasan Rohan
+All rights reserved.
+
+This source code is proprietary and confidential. 
+Unauthorized copying, modification, distribution, or use of this code is strictly prohibited.
+
