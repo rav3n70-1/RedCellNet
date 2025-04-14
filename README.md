@@ -78,26 +78,30 @@
 
 ## Screenshots
 
-Showcasing your app visually is essential to help users understand the interface and key features. Add screenshots by following these guidelines:
-
-1. **Prepare Screenshots:** Capture key screens such as the Home Screen, Blood Request Form, Donation Offers, and Map View.
-2. **Optimize Images:** Ensure images are optimized for web display.
-3. **Embed Images:** Use the Markdown image syntax to display screenshots within the README. For example:
-
    ```markdown
+   ### Login Page
+   [url=https://ibb.co.com/4RWRsN9S][img]https://i.ibb.co.com/tpBpZCk2/photo-2-2025-04-14-14-04-58.jpg[/img][/url]
+   
    ### Home Screen
-   ![App Home Screen](path/to/home_screen.png)
+   [url=https://ibb.co.com/hJphzcdG][img]https://i.ibb.co.com/ksYkCJDL/photo-4-2025-04-14-13-58-56.jpg[/img][/url]
 
    ### Blood Request Form
-   ![Blood Request Form](path/to/request_form.png)
+   [url=https://ibb.co.com/WvYWLJZS][img]https://i.ibb.co.com/m5MC3WkQ/photo-5-2025-04-14-13-58-56.jpg[/img][/url]
 
+   ### Create Blood Request
+   [url=https://ibb.co.com/v6H8fF4C][img]https://i.ibb.co.com/FLKtcr4k/photo-1-2025-04-14-14-04-58.jpg[/img][/url]
+   
    ### Map View
-   ![Map with Requests and Centers](path/to/map_view.png)
+   [url=https://ibb.co.com/whXBhk6S][img]https://i.ibb.co.com/LdWYdFpx/photo-3-2025-04-14-13-58-56.jpg[/img][/url]
+
+   ### Profile Page
+   [url=https://ibb.co.com/k2hbrs3L][img]https://i.ibb.co.com/7tGMTdg3/photo-1-2025-04-14-13-58-56.jpg[/img][/url]
+  
+   ### Learn Aware Page
+   [url=https://ibb.co.com/WWpgNnJq][img]https://i.ibb.co.com/mCF6rJW1/photo-2-2025-04-14-13-58-56.jpg[/img][/url]
+
+   ### 
    ```
-
-4. **Update Paths:** Make sure to update the `path/to/your-image.png` with the correct path relative to the README file or hosted URL.
-
----
 
 ## Technology Stack
 
