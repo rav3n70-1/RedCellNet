@@ -1,6 +1,7 @@
-<p align="center">
-RedCellNet - Blood Donation Network App
-</p>
+<h1 align="center" style="font-size: 36px; color: #d32f2f; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+  RedCellNet – Blood Donation Network App
+</h1>
+
 <p align="center">
   <img src="https://i.ibb.co.com/svqD8VfY/icon.png" alt="icon" border="0">
 </p>
