@@ -80,7 +80,7 @@
 A visual overview of RedCellNet's key features:
 
 🔐 Authentication
-<p align="center"> <img src="https://i.ibb.co.com/tpBpZCk2/Login-Page.jpg" alt="Login Page" width="250"/> <img src="https://i.ibb.co.com/CKxzP6F9/Register-Page.jpg" alt="Register Page" width="250"/> </p>&#8203;:
+<p align="center"> <img src="https://i.ibb.co.com/tpBpZCk2/Login-Page.jpg" alt="Login Page" width="250"/> <img src="https://i.ibb.co.com/CKxzP6F9/Register-Page.jpg" alt="Register Page" width="250"/> </p>&#8203;
 🏠 Home & Blood Requests
 <p align="center"> <img src="https://i.ibb.co.com/ksYkCJDL/Home-Page.jpg" alt="Home Page" width="250"/> <img src="https://i.ibb.co.com/m5MC3WkQ/Blood-Requests.jpg" alt="Blood Requests" width="250"/> </p>&#8203;
 ➕ Create Request & 🗺️ Map View
