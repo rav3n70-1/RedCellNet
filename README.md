@@ -77,19 +77,18 @@
 ---
 
 📸 Screenshots
-A visual tour of RedCellNet's key features:​
+A visual overview of RedCellNet's key features:
 
 🔐 Authentication
-<p align="center"> <img src="https://i.ibb.co.com/tpBpZCk2/Login-Page.jpg" alt="Login Page" width="250"/> <img src="https://i.ibb.co.com/CKxzP6F9/Register-Page.jpg" alt="Register Page" width="250"/> </p>&#8203;:contentReference[oaicite:4]{index=4}
+<p align="center"> <img src="https://i.ibb.co.com/tpBpZCk2/Login-Page.jpg" alt="Login Page" width="250"/> <img src="https://i.ibb.co.com/CKxzP6F9/Register-Page.jpg" alt="Register Page" width="250"/> </p>&#8203;:contentReference[oaicite:0]{index=0}
 🏠 Home & Blood Requests
-<p align="center"> <img src="https://i.ibb.co.com/ksYkCJDL/Home-Page.jpg" alt="Home Page" width="250"/> <img src="https://i.ibb.co.com/m5MC3WkQ/Blood-Requests.jpg" alt="Blood Requests" width="250"/> </p>&#8203;:contentReference[oaicite:5]{index=5}
+<p align="center"> <img src="https://i.ibb.co.com/ksYkCJDL/Home-Page.jpg" alt="Home Page" width="250"/> <img src="https://i.ibb.co.com/m5MC3WkQ/Blood-Requests.jpg" alt="Blood Requests" width="250"/> </p>&#8203;:contentReference[oaicite:1]{index=1}
 ➕ Create Request & 🗺️ Map View
-<p align="center"> <img src="https://i.ibb.co.com/FLKtcr4k/Create-Blood-Request-Form.jpg" alt="Create Blood Request Form" width="250"/> <img src="https://i.ibb.co.com/LdWYdFpx/Nearby-Map.jpg" alt="Nearby Map" width="250"/> </p>&#8203;:contentReference[oaicite:6]{index=6}
+<p align="center"> <img src="https://i.ibb.co.com/FLKtcr4k/Create-Blood-Request-Form.jpg" alt="Create Blood Request Form" width="250"/> <img src="https://i.ibb.co.com/LdWYdFpx/Nearby-Map.jpg" alt="Nearby Map" width="250"/> </p>&#8203;:contentReference[oaicite:2]{index=2}
 👤 Profile & ✏️ Edit Profile
-<p align="center"> <img src="https://i.ibb.co.com/7tGMTdg3/Profile-Page.jpg" alt="Profile Page" width="250"/> <img src="https://i.ibb.co.com/C5NSKsdV/Edit-Profile.jpg" alt="Edit Profile" width="250"/> </p>&#8203;:contentReference[oaicite:7]{index=7}
+<p align="center"> <img src="https://i.ibb.co.com/7tGMTdg3/Profile-Page.jpg" alt="Profile Page" width="250"/> <img src="https://i.ibb.co.com/C5NSKsdV/Edit-Profile.jpg" alt="Edit Profile" width="250"/> </p>&#8203;:contentReference[oaicite:3]{index=3}
 📚 Learn & Aware
-<p align="center"> <img src="https://i.ibb.co.com/mCF6rJW1/photo-2-2025-04-14-13-58-56.jpg" alt="Learn Aware Page" width="250"/> </p>&#8203;:contentReference[oaicite:8]{index=8}
-
+<p align="center"> <img src="https://i.ibb.co.com/mCF6rJW1/photo-2-2025-04-14-13-58-56.jpg" alt="Learn Aware Page" width="250"/> </p>&#8203;:contentReference[oaicite:4]{index=4}
 
 ## Technology Stack
 
