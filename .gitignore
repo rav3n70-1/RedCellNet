@@ -50,6 +50,7 @@ analysis_benchmark.json
 /packages/
 
 # Android Related
+
 **/android/**/gradle-wrapper.jar
 .gradle/
 **/android/captures/
@@ -65,6 +66,11 @@ analysis_benchmark.json
 /android/app/src/main/assets/flutter_assets/*
 /android/app/src/main/jniLibs/
 /android/app/libs/
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
+/web/index.html
+# Ensure .env* is also present if you use flutter_dotenv below
+.env*
 *.iml
 
 # iOS/XCode Related
