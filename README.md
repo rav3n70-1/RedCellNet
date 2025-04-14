@@ -80,22 +80,28 @@
 
    ```markdown
    ### Login Page
-   <img src="https://i.ibb.co.com/tpBpZCk2/photo-2-2025-04-14-14-04-58.jpg" alt="Login Page" border="0">
+   <img src="https://i.ibb.co.com/tpBpZCk2/Login-Page.jpg" alt="Login Page" border="0">
+
+   ### Register Page
+   <img src="https://i.ibb.co.com/CKxzP6F9/Register-Page.jpg" alt="Register Page" border="0">
    
    ### Home Screen
-   <img src="https://i.ibb.co.com/ksYkCJDL/photo-4-2025-04-14-13-58-56.jpg" alt="Home Screen" border="0">
+   <img src="https://i.ibb.co.com/ksYkCJDL/Home-Page.jpg" alt="Home Page" border="0">
 
    ### Blood Request Form
-   <img src="https://i.ibb.co.com/m5MC3WkQ/photo-5-2025-04-14-13-58-56.jpg" alt="Blood Request Form" border="0">
+   <img src="https://i.ibb.co.com/m5MC3WkQ/Blood-Requests.jpg" alt="Blood Requests" border="0">
 
    ### Create Blood Request
-   <img src="https://i.ibb.co.com/FLKtcr4k/photo-1-2025-04-14-14-04-58.jpg" alt="Create Blood Request" border="0">
+   <img src="https://i.ibb.co.com/FLKtcr4k/Create-Blood-Request-Form.jpg" alt="Create Blood Request Form" border="0">
    
    ### Map View
-   <img src="https://i.ibb.co.com/LdWYdFpx/photo-3-2025-04-14-13-58-56.jpg" alt="Map" border="0">
+   <img src="https://i.ibb.co.com/LdWYdFpx/Nearby-Map.jpg" alt="Nearby Map" border="0">
 
    ### Profile Page
-   <img src="https://i.ibb.co.com/7tGMTdg3/photo-1-2025-04-14-13-58-56.jpg" alt="Profile Page" border="0">
+   <img src="https://i.ibb.co.com/7tGMTdg3/Profile-Page.jpg" alt="Profile Page" border="0">
+
+   ### Edit Profile
+   <img src="https://i.ibb.co.com/C5NSKsdV/Edit-Profile.jpg" alt="Edit Profile" border="0">
   
    ### Learn Aware Page
    <img src="https://i.ibb.co.com/mCF6rJW1/photo-2-2025-04-14-13-58-56.jpg" alt="Learn Aware Page" border="0">
