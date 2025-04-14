@@ -78,7 +78,7 @@
 
 ## Screenshots
 
-   ```markdown
+   
    ### Login Page
    <img src="https://i.ibb.co.com/tpBpZCk2/Login-Page.jpg" alt="Login Page" border="0">
 
@@ -107,7 +107,6 @@
    <img src="https://i.ibb.co.com/mCF6rJW1/photo-2-2025-04-14-13-58-56.jpg" alt="Learn Aware Page" border="0">
 
    ### 
-   ```
 
 ## Technology Stack
 
