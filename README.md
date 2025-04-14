@@ -121,7 +121,7 @@ A visual overview of RedCellNet's key features:
 
 2. **Clone Repository:**  
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/rav3n70-1/RedCellNet
    ```
 
 3. **Firebase Project Setup:**  
