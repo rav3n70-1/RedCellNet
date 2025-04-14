@@ -108,14 +108,7 @@ RedCellNet is a mobile application built with Flutter and Firebase designed to s
             * `android/app/src/main/AndroidManifest.xml`
             * `ios/Runner/AppDelegate.swift`
             * `web/index.html`
-    * **ImgBB API Key:**
-        * Sign up at [https://imgbb.com/](https://imgbb.com/) and get your API key.
-        * **Crucially: Store this key securely.** Use the `flutter_dotenv` package:
-            * Add `flutter_dotenv` to `pubspec.yaml`.
-            * Create a `.env` file in the project root (add it to `.gitignore`!).
-            * Add `IMGBB_API_KEY=YOUR_ACTUAL_KEY` to `.env`.
-            * Load it in `main.dart`: `await dotenv.load(fileName: ".env");`
-            * Access it in `edit_profile_page.dart`: `final String imgbbApiKey = dotenv.env['IMGBB_API_KEY'] ?? 'MISSING';`
+    
     * **Android Signing Key:**
         * Generate your upload keystore (`.jks` file) using `keytool` (follow previous instructions). **Backup this file and its passwords securely!**
         * Create the `android/key.properties` file with the correct paths and passwords (ensure it's in `.gitignore`).
