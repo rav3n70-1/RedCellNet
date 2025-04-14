@@ -1,5 +1,5 @@
 <p align="center">
-# RedCellNet - Blood Donation Network App
+RedCellNet - Blood Donation Network App
 </p>
 <p align="center">
   <img src="https://i.ibb.co.com/svqD8VfY/icon.png" alt="icon" border="0">
