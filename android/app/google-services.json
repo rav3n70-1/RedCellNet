@@ -1,0 +1,91 @@
+{
+  "project_info": {
+    "project_number": "497080096855",
+    "firebase_url": "https://redcellnet-8a35e-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "redcellnet-8a35e",
+    "storage_bucket": "redcellnet-8a35e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:497080096855:android:2d0513abd9447e89296b12",
+        "android_client_info": {
+          "package_name": "com.example.red_cell_net"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "497080096855-kvk2acrps68fp0k4r45q5e8o8mvmh8p3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.red_cell_net",
+            "certificate_hash": "1e2396b3264f7be8c7602b4bc16523f222bf6f6b"
+          }
+        },
+        {
+          "client_id": "497080096855-g1anulj44n6s62fhtjs2hescutbeju7k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAeyKtEEjazaA9X1K5rHLfoJu1GfAjU0s4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "497080096855-g1anulj44n6s62fhtjs2hescutbeju7k.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "497080096855-3fna16af0grfajmrs2ll957ulcdc57me.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.redCellNetNew"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:497080096855:android:430258caf9214f44296b12",
+        "android_client_info": {
+          "package_name": "com.example.red_cell_net_new"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "497080096855-g1anulj44n6s62fhtjs2hescutbeju7k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAeyKtEEjazaA9X1K5rHLfoJu1GfAjU0s4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "497080096855-g1anulj44n6s62fhtjs2hescutbeju7k.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "497080096855-3fna16af0grfajmrs2ll957ulcdc57me.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.redCellNetNew"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

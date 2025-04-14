@@ -1,0 +1,100 @@
+name: red_cell_net_final
+description: "A new Flutter project."
+
+# Prevent accidental publishing to pub.dev.
+publish_to: 'none'
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+version: 1.0.0+1
+
+environment:
+  # Update this based on your Flutter version if needed, but ^3.6.1 might be outdated.
+  # Check your `flutter --version`. Let's use a more common recent range.
+  sdk: '>=3.3.0 <4.0.0' # Example range, adjust if needed
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations: # For localization
+    sdk: flutter
+  intl: ^0.19.0 # Or latest
+
+  # Firebase Core
+  firebase_core: ^3.1.1 # Use latest compatible
+
+  # Firebase Services
+  firebase_auth: ^5.1.1 # Use latest compatible
+  cloud_firestore: ^5.6.6 # Use latest compatible
+  firebase_messaging: ^15.0.2 # Use latest compatible
+
+  # OCR
+  google_mlkit_text_recognition: ^0.13.0 # Use latest compatible
+  image_picker: ^1.1.2 # Use latest compatible
+  google_sign_in: ^6.2.1
+  # Location & Permissions
+  geolocator: ^12.0.0 # Use latest compatible
+  permission_handler: ^11.3.1 # Use latest compatible
+  geocoding: ^3.0.0 # Use latest compatible
+
+  # Google Maps (Correct Name!)
+  google_maps_flutter: ^2.12.1
+  flutter_map: ^8.1.1 # Use latest compatible
+  google_maps_apis: ^1.1.1
+  foundation: ^0.0.5 # Use latest compatible
+  google_places_sdk: ^1.2.1
+  flutter_local_notifications: ^19.0.0
+
+  # HTTP Client (If still needed for other APIs, otherwise remove)
+  http: ^1.2.1 # Use latest compatible
+  http_parser: ^4.0.0 # Use latest compatible
+  dio: ^5.0.0 # Use latest compatible 
+
+  # Default Icons
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See https://flutter.dev/lints for more information.
+  flutter_lints: ^4.0.0 # Use latest compatible
+  flutter_launcher_icons: ^0.13.1 # Use latest compatible
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+# ... environment, dependencies, dev_dependencies ...
+
+flutter: # Start of Flutter section
+  uses-material-design: true
+  assets:
+    - assets/images/google_logo.png
+  # If you want to use the icon *within* your app code later (not just as launcher icon)
+  # you might need to declare the *folder* here:
+  # assets:
+  #  - assets/icon/
+
+# --- End of Flutter section ---
+
+# CORRECT INDENTATION! This is now a top-level key, same level as 'flutter:' above
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#bec9cd"
+  # adaptive_icon_foreground: ... # Optional
+
+# --- End of file ---
