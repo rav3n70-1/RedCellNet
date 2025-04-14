@@ -16,29 +16,38 @@ RedCellNet is a mobile application built with Flutter and Firebase designed to s
 ## ✨ Features
 
 * **User Authentication:** Secure login and registration using Email/Password and Google Sign-In.
-* **User Profiles:** Manage personal details, blood type, contact information, and donation availability status.
+* **User Profiles:** Manage personal details, blood type, contact information, and donation availability status. Points and badges earned are displayed.
 * **Profile Editing:** Update profile information easily.
 * **Blood Report OCR:** Scan blood reports using ML Kit Text Recognition to automatically detect and suggest blood types during profile editing.
 * **Blood Requests:**
-    * Create detailed blood requests (patient info, required type, units, urgency, hospital, contact).
-    * View a list of all open requests.
-    * View a filtered list of requests created by the logged-in user ("My Requests").
+    * Create detailed blood requests (patient info, required type, units, urgency, hospital, contact). Geocoding for coordinates attempted.
+    * View a list of all open requests ("All Open" tab).
+    * View a filtered list of requests created by the logged-in user ("My Requests" tab).
     * Filter open requests by Blood Group and Urgency Level.
     * View request details.
     * Delete own blood requests.
 * **Donation Offers & Connection:**
-    * Compatible donors can "Offer Help" on requests.
+    * Compatible, available donors can "Offer Help" on requests.
     * Requesters can view pending offers on their requests.
-    * Requesters can **Accept** or **Reject** offers. Accepting fulfills the request and rejects other offers.
-    * Requesters can view the accepted donor's contact information after accepting an offer.
+    * Requesters can **Accept** or **Reject** offers. Accepting fulfills the request and auto-rejects other pending offers.
+    * Requesters can view the accepted donor's name and contact information after accepting an offer.
     * _(TODO: Donor view of their offer status and requester contact info)_
-* **Nearby Map:** Visualize locations of open blood requests and registered donation centers (Google Maps integration - requires API key setup).
-* **Donation Centers:** View registered donation centers on the map.
+* **Nearby Map:** Visualize locations of open blood requests and registered donation centers (requires Google Maps setup & API key).
+* **Donation Centers:** View registered donation centers (fetched from Firestore) on the map.
 * **Educational Content:** Browse articles and tips related to blood donation ("Learn & Aware" section).
-* **Rewards System:**
-    * Earn points for actions like completing profile and reading content.
-    * Earn badges (e.g., "Profile Complete") based on achievements.
-    * View points and earned badges on the profile page.
+* **Rewards System:** Gamification through points and achievement badges.
+    * **Points:** Earn points for actions like completing profile and reading educational content. View total points on the profile.
+    * **Badges:** Earn badges based on achievements. Current badges include:
+        * **First Drop** (`Icons.water_drop_outlined`): Awarded after the user records their first successful blood donation. _(Logic TBD)_
+        * **High Five** (`Icons.thumb_up_alt_outlined`): Awarded after completing 5 donations. _(Logic TBD)_
+        * **Double Digits** (`Icons.filter_alt_outlined`): Awarded after completing 10 donations. _(Logic TBD)_
+        * **Rare Hero** (`Icons.star_outline`): Awarded for donating a rare blood type (e.g., AB-, O-). _(Logic TBD)_
+        * **Crisis Warrior** (`Icons.local_fire_department_outlined`): Awarded for donating during an emergency/disaster mode. _(Logic TBD)_
+        * **Lifesaver Buddy** (`Icons.group_add_outlined`): Awarded for referring new donors. _(Logic TBD)_
+        * **Health Aware** (`Icons.school_outlined`): Awarded after reading a certain number of educational articles. _(Points awarded, badge TBD)_
+        * **Profile Complete** (`Icons.check_circle_outline`): Awarded when Name, Blood Type, City/Area are filled. **(Logic Implemented!)**
+        * **Standby Guardian** (`Icons.shield_outlined`): Awarded for consistently being available to donate. _(Logic TBD)_
+        * **Legend Donor** (`Icons.emoji_events_outlined`): Awarded after a significant number of donations. _(Logic TBD)_
 * **Push Notifications (FCM):**
     * Receive notifications (setup for foreground, background, terminated states).
     * Tap notifications to navigate directly to relevant request details.
@@ -52,15 +61,12 @@ RedCellNet is a mobile application built with Flutter and Firebase designed to s
     * Firebase Authentication (Email/Password, Google Sign-In)
     * Cloud Firestore (NoSQL Database)
     * Firebase Cloud Messaging (Push Notifications - Client setup)
-    * _(Firebase Storage originally planned, replaced with ImgBB due to user constraints)_
 * **Mapping & Geocoding:** Google Maps Platform
     * `Maps_flutter` (Android/iOS Map Display)
     * `Maps_apis` (Geocoding - requires billing/API key setup)
-* **Image Handling:**
-    * `image_picker` (Select images from gallery/camera)
+* **Image & Text Recognition:**
+    * `image_picker` (Select images from gallery/camera for OCR)
     * `google_mlkit_text_recognition` (On-device OCR)
-    * `http` & `http_parser` (For uploading to ImgBB)
-    * ImgBB (Third-party image hosting for profile pictures)
 * **State Management:** Implicit (`StatefulWidget`, `StreamBuilder`, `FutureBuilder`)
 * **Other:**
     * `intl` (Date/Time formatting)
@@ -70,101 +76,45 @@ RedCellNet is a mobile application built with Flutter and Firebase designed to s
 
 ## 🛠️ Setup & Installation (for Developers)
 
-1.  **Prerequisites:**
-    * Flutter SDK (Latest stable recommended)
-    * Git
-    * An IDE (like VS Code or Android Studio)
-    * Java Development Kit (JDK) (for Android signing key generation)
-
-2.  **Clone Repository:**
-    ```bash
-    git clone [https://github.com/YourUsername/YourRepositoryName.git](https://github.com/YourUsername/YourRepositoryName.git) # Replace with your repo URL
-    cd YourRepositoryName
-    ```
-
+1.  **Prerequisites:** Flutter SDK, Git, IDE, JDK.
+2.  **Clone Repository:** `git clone <your-repo-url>`
 3.  **Firebase Project Setup:**
-    * Create a new Firebase project at [https://console.firebase.google.com/](https://console.firebase.google.com/).
-    * **Register Apps:** Add an Android app (using package name `com.example.red_cell_net`), an iOS app (if needed), and a Web app to the project.
-    * **Download Config Files:**
-        * Download `google-services.json` and place it in `android/app/`.
-        * Download `GoogleService-Info.plist` and place it in `ios/Runner/`.
-        * Configure web initialization if needed (often handled by FlutterFire).
-        * **Important:** Ensure these files are listed in your `.gitignore` and not committed.
-    * **Enable Services:** In the Firebase console, enable:
-        * **Authentication:** Enable Email/Password and Google Sign-In providers. Add your Android SHA-1 keys (debug and release) and configure Web OAuth Client ID for Google Sign-In.
-        * **Cloud Firestore:** Create a Firestore database (start in test mode for development, secure rules later).
-        * **Storage:** Enable Cloud Storage (required for ImgBB alternative setup, though not directly used if sticking to ImgBB). Apply the security rules provided earlier (or stricter ones). *Note: If you resolve billing issues, you can switch back to Firebase Storage.*
-    * **Publish Firestore Rules:** Copy the final version of the Firestore security rules (allowing reads, specific creates/updates/deletes) provided in our conversation and publish them in the Firestore Rules tab.
-    * **Create Firestore Indexes:** Run the app and check the debug console for errors related to missing indexes (especially for request filtering and urgent requests). Click the links provided in the logs to create the necessary composite indexes in Firestore.
-
+    * Create Firebase project.
+    * Register Android, iOS, Web apps.
+    * Download/place `google-services.json` (Android) & `GoogleService-Info.plist` (iOS). Ensure they are in `.gitignore`.
+    * Enable Authentication (Email/Pass, Google - configure SHA-1s & Web Client ID), Firestore (create database), Cloud Messaging.
+    * Publish Firestore Security Rules (use rules provided in conversation).
+    * Create required Firestore Indexes by running the app and clicking console links when errors appear (for filtering/ordering requests).
 4.  **API Keys & Configuration:**
-    * **Google Maps Platform:**
-        * Go to [https://console.cloud.google.com/](https://console.cloud.google.com/).
-        * Select your Firebase project.
-        * Enable **Maps SDK for Android**, **Maps SDK for iOS**, **Geocoding API**, and **Maps JavaScript API** (for web).
-        * **Enable Billing** for the project (required for Maps/Geocoding to work reliably).
-        * Create an API Key restricted for these APIs and your specific app (Android package name + SHA-1, iOS bundle ID, Web HTTP referrers).
-        * Add the key to:
-            * `android/app/src/main/AndroidManifest.xml`
-            * `ios/Runner/AppDelegate.swift`
-            * `web/index.html`
-    
-    * **Android Signing Key:**
-        * Generate your upload keystore (`.jks` file) using `keytool` (follow previous instructions). **Backup this file and its passwords securely!**
-        * Create the `android/key.properties` file with the correct paths and passwords (ensure it's in `.gitignore`).
-        * Ensure `android/app/build.gradle.kts` is configured to read `key.properties` for release signing.
-
-5.  **Install Dependencies:**
-    ```bash
-    flutter pub get
-    ```
-
-6.  **Run the App:**
-    ```bash
-    flutter run # Debug mode
-    # OR for release testing (after signing setup)
-    flutter run --release
-    ```
+    * **Google Maps Platform:** Enable Maps SDKs & Geocoding API. **Enable Billing**. Create restricted API Key. Add key to `AndroidManifest.xml`, `AppDelegate.swift`, `web/index.html`. (See earlier steps for details).
+    * **(No ImgBB Key Needed)** - Profile pictures currently skipped.
+    * **Android Signing Key:** Generate upload key (`.jks`) using `keytool`. Create `android/key.properties` with credentials and correct path (use `/`). Add `key.properties` to `.gitignore`. Ensure `build.gradle.kts` is configured for release signing.
+5.  **Install Dependencies:** `flutter pub get`
+6.  **Run the App:** `flutter run`
 
 ## 🚀 Usage
 
-1.  **Register/Login:** Create an account using email/password or sign in with Google.
-2.  **Home Screen:** View your points, request blood, or navigate to learn about donation. See urgent requests (requires index).
-3.  **Requests Tab:** View all open requests or filter to see only your own requests. Apply filters for blood type or urgency. Tap a request to see details.
-4.  **Map Tab:** View nearby requests and donation centers visually (requires Maps API key setup).
-5.  **Profile Tab:** View your profile details, points, badges, donation history (TBD). Toggle your availability to donate. Edit your profile or log out.
-6.  **Edit Profile:** Update your name, contact info, blood type. Use the Scan button to try detecting blood type via OCR from a report image. Upload a profile picture. Saving a complete profile awards points/badge.
-7.  **Learn Tab:** Browse and read educational articles. Earn points for reading each article once.
-8.  **Request Details:**
-    * View full details of a blood request.
-    * If you are the requester, you can delete the request or view/accept/reject offers from donors.
-    * If you are *not* the requester, you can contact the requester (TBD) or offer help (if compatible and available).
-    * If an offer is accepted (by the requester), the requester sees the donor's contact details.
+(Brief overview of how to use the main app features - Register/Login, View Home, Request Blood, View Requests/Map, Offer/Accept/Reject, View Profile/Badges, Learn Content etc.)
 
 ## ⚠️ Known Issues & TODOs
 
-* **Google Maps Billing/API Key:** Geocoding requests currently fail (`REQUEST_DENIED`) and the map shows a watermark because a billing account needs to be properly linked and configured in the Google Cloud Console for the API key being used.
-* **Donor "Connect" View:** Donors currently cannot see the status of their offers or the requester's contact info after acceptance. A "My Offers" section is needed.
-* **Notifications (Sending):** The client-side setup for receiving notifications is done, but the backend Cloud Function to *send* notifications (e.g., for new requests, accepted offers) needs to be deployed.
-* **Donation History:** The UI displays history, but the logic for recording actual donations needs implementation.
-* **Badge Awarding Logic:** Only the "Profile Complete" badge is awarded automatically. Logic for other badges (based on donations, points, etc.) needs to be added.
-* **OCR Robustness:** The current OCR text parsing for blood type works for some formats but may fail on others. It relies on user confirmation or manual entry if detection fails.
-* **Contact Requester:** The "Contact" button currently shows placeholder text; needs `url_launcher` implementation to initiate a phone call.
-* **Localization:** Basic structure might be present, but full English/Bangla localization across all UI elements needs review and completion.
-* **Error Handling:** Improve user-facing error messages and handling for edge cases.
-* **Testing:** More comprehensive unit, widget, and integration tests are needed.
-* **Security:** Revisit Firestore/Storage rules for potential tightening (e.g., field-level read access for profiles). Ensure API keys are stored securely using `flutter_dotenv` or similar, not hardcoded. Clean Git history if secrets were exposed.
+* **Google Maps Billing/API Key:** Geocoding API fails (`REQUEST_DENIED`) and map has watermark until billing/key setup is fully resolved in Google Cloud Console.
+* **Donor "Connect" View:** Donors cannot currently see their offer statuses or accepted requester contact info. A "My Offers" section is needed.
+* **Notifications (Sending):** Backend Cloud Function to send notifications is not yet deployed.
+* **Badge Logic:** Most badges are only displayed; logic for awarding them based on donations, etc., needs implementation.
+* **Donation History:** UI exists, but logic to record actual donations is needed.
+* **OCR Robustness:** Parsing logic works for tested formats but may fail on others.
+* **Contact Requester Button:** Placeholder, needs `url_launcher`.
+* **Localization:** Needs full review and implementation.
+* **Error Handling & Testing:** Needs improvement.
+* **Security:** Revisit rules, ensure no keys are hardcoded (use `flutter_dotenv` if needed), clean Git history if secrets were exposed.
 
 ## Contributing
 
-This project is currently under personal development.
+_(Optional: Add contribution guidelines)_
+Currently under development.
 
 ## License
 
-
-Copyright 2025 Mehedi Hasan Rohan
-All rights reserved.
-
-This source code is proprietary and confidential. 
-Unauthorized copying, modification, distribution, or use of this code is strictly prohibited.
-
+_(Optional: Add license like MIT)_
+Unlicensed.
