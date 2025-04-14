@@ -3,8 +3,9 @@
 </h1>
 
 <p align="center">
-  <img src="https://i.ibb.co.com/svqD8VfY/icon.png" alt="icon" border="50">
+  <img src="https://i.ibb.co.com/svqD8VfY/icon.png" alt="icon" style="width: 150px; height: 150px;" border="0">
 </p>
+
 
 <p align="center">
   <strong>Connecting blood donors and recipients quickly and efficiently.</strong>
