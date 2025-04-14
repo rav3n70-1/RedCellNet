@@ -188,7 +188,7 @@ Once the app is running, users can:
 
 ## Contributing
 
-Your contributions are welcome as we continue to develop the app. Please follow our contribution guidelines and submit pull requests for review.
+Currently this is a private project.
 
 ---
 
@@ -202,4 +202,3 @@ This source code is proprietary and confidential. Unauthorized copying, modifica
 
 ---
 
-This updated README now clearly outlines the project’s features, tech stack, setup instructions, and includes a dedicated section for screenshots to help users understand the app visually. Adjust the image paths as necessary, and feel free to further refine any sections to better fit your evolving project needs.
