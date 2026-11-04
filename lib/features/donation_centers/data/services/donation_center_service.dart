@@ -1,65 +1,75 @@
 // lib/features/donation_centers/data/services/donation_center_service.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-// Ensure the model import path is correct for your structure
+import 'package:flutter/foundation.dart';
+import 'package:red_cell_net_final/core/config/supabase_config.dart';
 import 'package:red_cell_net_final/features/donation_centers/data/models/donation_center.dart';
 
 class DonationCenterService {
-  final CollectionReference<Map<String, dynamic>> _centersCollection =
-      FirebaseFirestore.instance
-          .collection('donationCenters')
-          .withConverter<Map<String, dynamic>>(
-            fromFirestore: (snapshot, _) => snapshot.data()!,
-            toFirestore: (map, _) => map,
-          );
-
-  // Gets a stream of VERIFIED donation centers
-  // Gets a stream of VERIFIED donation centers with enhanced logging
   Stream<List<DonationCenter>> getVerifiedCentersStream() {
-    Query<Map<String, dynamic>> query =
-        _centersCollection.where('isVerified', isEqualTo: true);
-    // Removed .orderBy('name') for simplicity during debugging
-
-    return query.snapshots().map((snapshot) {
-      // Log how many documents Firestore returned for this query snapshot
-      print(
-          ">>> Center Stream Snapshot Received: ${snapshot.docs.length} documents matched query.");
-
-      List<DonationCenter> centers =
-          []; // List to hold successfully mapped centers
-      for (var doc in snapshot.docs) {
-        // Try to map each document individually and catch errors per document
-        try {
-          print("  --> Attempting to map doc ID: ${doc.id}");
-          // Call the factory constructor which might throw an error
-          centers.add(DonationCenter.fromFirestore(doc));
-          print("  --> Successfully mapped doc ID: ${doc.id}");
-        } catch (e) {
-          // Log which specific document failed and why
-          print(
-              "!!! FAILED to map doc ID: ${doc.id}. Error during conversion: $e");
-          // Continue to the next document without adding the failed one
-        }
-      }
-      // Log how many documents were successfully converted
-      print("<<< Center Stream Mapped List Count: ${centers.length}");
-      return centers; // Return the list of successfully mapped items
-    });
-    // Removed outer try-catch as errors are handled per-document now
-    // Removed .handleError as stream errors better handled in UI
+    try {
+      return supabase
+          .from('donation_centers')
+          .stream(primaryKey: ['id'])
+          .eq('is_verified', true)
+          .map((rows) => rows.map((r) => DonationCenter.fromMap(r)).toList());
+    } catch (e) {
+      debugPrint("Error streaming verified donation centers: $e");
+      return Stream.value([]);
+    }
   }
 
-  // Optional: Method to get a single item
+  Stream<List<DonationCenter>> getDonationCentersStream() {
+    try {
+      return supabase
+          .from('donation_centers')
+          .stream(primaryKey: ['id'])
+          .map((rows) => rows.map((r) => DonationCenter.fromMap(r)).toList());
+    } catch (e) {
+      debugPrint("Error streaming donation centers: $e");
+      return Stream.value([]);
+    }
+  }
+
   Future<DonationCenter?> getCenter(String docId) async {
     try {
-      final docSnapshot = await _centersCollection.doc(docId).get();
-      if (docSnapshot.exists) {
-        return DonationCenter.fromFirestore(docSnapshot);
-      } else {
-        return null;
+      final res = await supabase
+          .from('donation_centers')
+          .select()
+          .eq('id', docId)
+          .maybeSingle();
+      if (res != null) {
+        return DonationCenter.fromMap(res);
       }
-    } catch (e) {
-      print("Error fetching single center $docId: $e");
       return null;
+    } catch (e) {
+      debugPrint("Error fetching single center $docId: $e");
+      return null;
+    }
+  }
+
+  Future<void> addCenter(Map<String, dynamic> data) async {
+    try {
+      await supabase.from('donation_centers').insert(data);
+    } catch (e) {
+      debugPrint("Error adding donation center: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateCenter(String id, Map<String, dynamic> data) async {
+    try {
+      await supabase.from('donation_centers').update(data).eq('id', id);
+    } catch (e) {
+      debugPrint("Error updating donation center: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> deleteCenter(String id) async {
+    try {
+      await supabase.from('donation_centers').delete().eq('id', id);
+    } catch (e) {
+      debugPrint("Error deleting donation center: $e");
+      rethrow;
     }
   }
 }

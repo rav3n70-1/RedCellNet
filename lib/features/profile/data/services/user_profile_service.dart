@@ -1,141 +1,201 @@
 // lib/features/profile/data/services/user_profile_service.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:red_cell_net_final/core/config/supabase_config.dart';
+
+/// Lightweight wrapper to keep existing UI StreamBuilders compatible without Firestore.
+class ProfileSnapshot {
+  final Map<String, dynamic>? _data;
+  final bool exists;
+  final String id;
+
+  ProfileSnapshot(this._data, {String? id})
+      : exists = _data != null,
+        id = id ?? _data?['id']?.toString() ?? '';
+
+  Map<String, dynamic>? data() => _data;
+}
 
 class UserProfileService {
-  final CollectionReference _usersCollection =
-      FirebaseFirestore.instance.collection('users');
+  Map<String, dynamic> _normalizeProfile(Map<String, dynamic> raw) {
+    final Map<String, dynamic> m = Map<String, dynamic>.from(raw);
+    m['uid'] ??= m['id'];
+    m['bloodType'] ??= m['blood_type'];
+    m['blood_type'] ??= m['bloodType'];
+    m['locationCity'] ??= m['location_city'];
+    m['location_city'] ??= m['locationCity'];
+    m['phoneNumber'] ??= m['phone_number'];
+    m['phone_number'] ??= m['phoneNumber'];
+    m['isAvailableToDonate'] ??= m['is_available_to_donate'];
+    m['is_available_to_donate'] ??= m['isAvailableToDonate'];
+    m['totalDonations'] ??= m['total_donations'] ?? 0;
+    m['total_donations'] ??= m['totalDonations'] ?? 0;
+    m['points'] ??= 0;
+    m['badges'] ??= [];
+    m['verificationStatus'] ??= m['verification_status'] ?? 'unverified';
+    m['verification_status'] ??= m['verificationStatus'] ?? 'unverified';
+    m['verificationLab'] ??= m['verification_lab'];
+    m['verificationCert'] ??= m['verification_cert'];
+    m['verificationNotes'] ??= m['verification_notes'];
+    m['donationHistory'] ??= m['donation_history'] ?? [];
+    m['donation_history'] ??= m['donationHistory'] ?? [];
+    m['viewedContentIds'] ??= m['viewed_content_ids'] ?? [];
+    m['viewed_content_ids'] ??= m['viewedContentIds'] ?? [];
+    m['fcmToken'] ??= m['fcm_token'];
+    m['fcm_token'] ??= m['fcmToken'];
+    return m;
+  }
 
-  Future<void> createUserProfile(User user, {String? name}) async {
-    final DocumentReference userDoc = _usersCollection.doc(user.uid);
-    final Map<String, dynamic> initialData = {
-      'uid': user.uid, 'email': user.email, 'name': name ?? '',
-      'bloodType': null, 'locationCity': null, 'locationCoords': null,
-      'phoneNumber': null, 'points': 0, 'badges': [],
-      'isAvailableToDonate': false, 'createdAt': FieldValue.serverTimestamp(),
-      'donationHistory': [], 'fcmToken': null,
-      'viewedContentIds': [], // <-- Initialize viewed content list
-    };
+  Map<String, dynamic> _denormalizeForSupabase(Map<String, dynamic> data) {
+    final Map<String, dynamic> out = {};
+    data.forEach((key, value) {
+      if (key == 'bloodType') {
+        out['blood_type'] = value;
+      } else if (key == 'locationCity') {
+        out['location_city'] = value;
+      } else if (key == 'locationCoords') {
+        out['location_coords'] = value;
+      } else if (key == 'phoneNumber') {
+        out['phone_number'] = value;
+      } else if (key == 'isAvailableToDonate') {
+        out['is_available_to_donate'] = value;
+      } else if (key == 'totalDonations') {
+        out['total_donations'] = value;
+      } else if (key == 'verificationStatus') {
+        out['verification_status'] = value;
+      } else if (key == 'verificationLab') {
+        out['verification_lab'] = value;
+      } else if (key == 'verificationCert') {
+        out['verification_cert'] = value;
+      } else if (key == 'verificationNotes') {
+        out['verification_notes'] = value;
+      } else if (key == 'verificationRequestedAt') {
+        out['verification_requested_at'] = DateTime.now().toUtc().toIso8601String();
+      } else if (key == 'donationHistory') {
+        out['donation_history'] = value;
+      } else if (key == 'viewedContentIds') {
+        out['viewed_content_ids'] = value;
+      } else if (key == 'fcmToken') {
+        out['fcm_token'] = value;
+      } else if (key != 'uid') {
+        out[key] = value;
+      }
+    });
+    out['updated_at'] = DateTime.now().toUtc().toIso8601String();
+    return out;
+  }
+
+  Future<void> createUserProfileFromDetails({
+    required String uid,
+    required String email,
+    String? name,
+  }) async {
     try {
-      await userDoc.set(initialData);
-      print('User profile created successfully for UID: ${user.uid}');
+      await supabase.from('profiles').upsert({
+        'id': uid,
+        'email': email,
+        'name': name ?? '',
+        'points': 0,
+        'badges': [],
+        'is_available_to_donate': false,
+        'total_donations': 0,
+        'verification_status': 'unverified',
+        'donation_history': [],
+        'viewed_content_ids': [],
+      });
+      debugPrint('User profile created/upserted in Supabase for UID: $uid');
     } catch (e) {
-      print('Error creating user profile: $e');
-      throw Exception('Failed to create user profile.');
+      debugPrint('Error creating user profile in Supabase: $e');
     }
   }
 
-  Stream<DocumentSnapshot<Map<String, dynamic>>> getUserProfileStream(
-      String uid) {
-    return _usersCollection
-        .doc(uid)
-        .snapshots()
-        .cast<DocumentSnapshot<Map<String, dynamic>>>();
+  Stream<ProfileSnapshot> getUserProfileStream(String uid) {
+    try {
+      return supabase
+          .from('profiles')
+          .stream(primaryKey: ['id'])
+          .eq('id', uid)
+          .map((rows) {
+            if (rows.isEmpty) return ProfileSnapshot(null, id: uid);
+            return ProfileSnapshot(_normalizeProfile(rows.first), id: uid);
+          });
+    } catch (e) {
+      debugPrint("Error streaming user profile from Supabase: $e");
+      return Stream.value(ProfileSnapshot(null, id: uid));
+    }
   }
 
   Future<void> updateUserProfile(String uid, Map<String, dynamic> data) async {
-    final Map<String, dynamic> dataWithTimestamp = {
-      ...data,
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
     try {
-      await _usersCollection.doc(uid).update(dataWithTimestamp);
-      print('User profile updated successfully for UID: $uid');
+      final payload = _denormalizeForSupabase(data);
+      await supabase.from('profiles').update(payload).eq('id', uid);
+      debugPrint('User profile updated successfully in Supabase for UID: $uid');
     } catch (e) {
-      print('Error updating user profile: $e');
-      throw Exception('Failed to update user profile.');
+      debugPrint('Error updating user profile in Supabase: $e');
+      throw Exception('Failed to update user profile in Supabase.');
     }
   }
 
-  Future<DocumentSnapshot<Map<String, dynamic>>> getUserProfile(
-      String uid) async {
+  Future<ProfileSnapshot> getUserProfile(String uid) async {
     try {
-      final docSnapshot = await _usersCollection.doc(uid).get().then(
-          (snapshot) => snapshot as DocumentSnapshot<Map<String, dynamic>>);
-      if (!docSnapshot.exists) {
-        throw Exception('User profile document does not exist.');
+      final res = await supabase
+          .from('profiles')
+          .select()
+          .eq('id', uid)
+          .maybeSingle();
+
+      if (res == null) {
+        return ProfileSnapshot(null, id: uid);
       }
-      return docSnapshot;
+      return ProfileSnapshot(_normalizeProfile(res), id: uid);
     } catch (e) {
-      print('Error getting user profile: $e');
-      throw Exception('Failed to get user profile.');
+      debugPrint('Error getting user profile from Supabase: $e');
+      return ProfileSnapshot(null, id: uid);
     }
   }
 
   Future<void> saveUserFcmToken(String uid, String? token) async {
-    if (token == null || token.isEmpty) {
-      print("FCM token null/empty, not saving.");
-      return;
-    }
+    if (token == null || token.isEmpty) return;
     try {
-      await _usersCollection.doc(uid).update({'fcmToken': token});
-      print('User FCM token saved/updated for UID: $uid');
+      await supabase.from('profiles').update({
+        'fcm_token': token,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', uid);
+      debugPrint('User FCM token saved in Supabase for UID: $uid');
     } catch (e) {
-      print('Update failed for FCM token ($e), attempting set with merge...');
-      try {
-        await _usersCollection
-            .doc(uid)
-            .set({'fcmToken': token}, SetOptions(merge: true));
-        print('User FCM token set via merge for UID: $uid');
-      } catch (e2) {
-        print('Error saving FCM token via set/merge for user $uid: $e2');
-      }
+      debugPrint('Error saving FCM token in Supabase: $e');
     }
   }
 
-  // --- NEW METHOD for Content Points ---
-  /// Attempts to award points for viewing content.
-  /// Returns true if points were awarded, false otherwise (already viewed or error).
+  /// Atomically awards points for viewing content item.
   Future<bool> awardPointsForViewingContent(
       String userId, String contentId) async {
     if (userId.isEmpty || contentId.isEmpty) return false;
 
-    final DocumentReference userDocRef = _usersCollection.doc(userId);
-    const int pointsPerView = 1; // Points awarded for reading
-
     try {
-      // Use a transaction to read and write atomically
-      return await FirebaseFirestore.instance
-          .runTransaction<bool>((transaction) async {
-        final DocumentSnapshot<Object?> userSnapshot =
-            await transaction.get(userDocRef);
+      final profile = await getUserProfile(userId);
+      if (!profile.exists) return false;
 
-        if (!userSnapshot.exists) {
-          print("User document $userId not found for awarding points.");
-          return false; // User doesn't exist
-        }
+      final data = profile.data()!;
+      final List<dynamic> viewedList = data['viewed_content_ids'] ?? [];
+      final List<String> viewedIds = viewedList.map((e) => e.toString()).toList();
 
-        // Get current data safely
-        final Map<String, dynamic> userData =
-            userSnapshot.data() as Map<String, dynamic>? ?? {};
-        final List<dynamic> viewedIdsDyn = userData['viewedContentIds'] ?? [];
-        // Ensure we have a List<String> for contains check
-        final List<String> viewedIds =
-            List<String>.from(viewedIdsDyn.map((e) => e.toString()));
-        final int currentPoints = userData['points'] ?? 0;
+      if (viewedIds.contains(contentId)) {
+        return false; // Already viewed
+      }
 
-        // Check if content already viewed
-        if (viewedIds.contains(contentId)) {
-          print(
-              "Content $contentId already viewed by user $userId. No points awarded.");
-          return false; // Already viewed, no points awarded
-        }
+      viewedIds.add(contentId);
+      final int newPoints = (data['points'] as int? ?? 0) + 1;
 
-        // Content not viewed before: Award points and add ID to list
-        final int newPoints = currentPoints + pointsPerView;
-        transaction.update(userDocRef, {
-          'points': newPoints,
-          'viewedContentIds':
-              FieldValue.arrayUnion([contentId]) // Atomically add ID
-        });
-        print(
-            "Awarded $pointsPerView point(s) to user $userId for viewing content $contentId. New total: $newPoints");
-        return true; // Points awarded
-      });
+      await supabase.from('profiles').update({
+        'points': newPoints,
+        'viewed_content_ids': viewedIds,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', userId);
+
+      return true;
     } catch (e) {
-      print("Error during awardPointsForViewingContent transaction: $e");
-      return false; // Transaction failed
+      debugPrint('Error awarding points in Supabase: $e');
+      return false;
     }
   }
-  // --- End NEW METHOD ---
 }

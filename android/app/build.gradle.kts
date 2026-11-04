@@ -21,24 +21,24 @@ val flutterVersionName: String = localProperties.getProperty("flutter.versionNam
 android {
     namespace = "com.example.red_cell_net" // Check/Update
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973" // Keep this
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
         // Keep desugaring enabled
         isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     sourceSets { getByName("main").java.srcDirs("src/main/kotlin") }
 
     defaultConfig {
         applicationId = "com.example.red_cell_net" // Check/Update
-        minSdk = 23 // Keep this
+        minSdk = flutter.minSdkVersion // Keep this
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode ?: flutterVersionCode.toInt()
         versionName = flutter.versionName ?: flutterVersionName

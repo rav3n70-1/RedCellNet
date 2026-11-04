@@ -1,12 +1,11 @@
 // lib/features/educational_content/presentation/pages/content_detail_page.dart
 import 'package:flutter/material.dart';
+import 'package:red_cell_net_final/core/services/supabase_auth_service.dart';
+import 'package:red_cell_net_final/core/theme/app_theme.dart';
+import 'package:red_cell_net_final/core/widgets/common_widgets.dart';
 import 'package:red_cell_net_final/features/educational_content/data/models/content_item.dart';
 import 'package:red_cell_net_final/features/educational_content/data/services/content_service.dart';
-// Imports for awarding points
 import 'package:red_cell_net_final/features/profile/data/services/user_profile_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-// Import dart:convert if using JSON parsing for notification payload later
-// import 'dart:convert';
 
 class ContentDetailPage extends StatefulWidget {
   final String contentId;
@@ -19,122 +18,218 @@ class ContentDetailPage extends StatefulWidget {
 
 class _ContentDetailPageState extends State<ContentDetailPage> {
   final ContentService _contentService = ContentService();
-  // Add instances for awarding points
   final UserProfileService _profileService = UserProfileService();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   late Future<ContentItem?> _contentFuture;
-  bool _pointsAwardedAttempted =
-      false; // Prevent multiple attempts per page load
+  bool _pointsAwardedAttempted = false;
 
   @override
   void initState() {
     super.initState();
     _contentFuture = _contentService.getContentItem(widget.contentId);
-    // Don't call award points here yet, wait for FutureBuilder successful load
   }
 
-  // Helper to get localized text
   String getLocalizedText(String english, String bangla) {
     final locale = Localizations.localeOf(context);
     return locale.languageCode == 'bn' ? bangla : english;
   }
 
-  // Helper function to attempt awarding points
   Future<void> _attemptAwardPoints(String contentId) async {
-    // Only attempt once per page view
     if (_pointsAwardedAttempted) return;
-    setState(() {
-      _pointsAwardedAttempted = true;
-    }); // Mark as attempted
+    setState(() => _pointsAwardedAttempted = true);
 
-    final currentUser = _auth.currentUser;
-    if (currentUser == null || contentId.isEmpty) return;
+    final String? currentUserId = SupabaseAuthService().currentUserId;
+    if (currentUserId == null || contentId.isEmpty) return;
 
-    print("Attempting to award points for viewing content: $contentId");
     final bool awarded = await _profileService.awardPointsForViewingContent(
-        currentUser.uid, contentId);
+        currentUserId, contentId);
 
     if (awarded && mounted) {
-      print("Points awarded!");
-      // Show confirmation SnackBar
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("+1 Point for reading!"),
-        duration: Duration(seconds: 2),
-        backgroundColor: Colors.green,
-      ));
-    } else if (mounted) {
-      // Don't show snackbar if already viewed, just log it
-      print("Points not awarded (likely already viewed or error occurred).");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("🎉 +1 Life Point earned for reading this article!"),
+          duration: Duration(seconds: 3),
+          backgroundColor: AppColors.success,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // AppBar is now part of CustomScrollView
+      backgroundColor: Colors.white,
       body: FutureBuilder<ContentItem?>(
         future: _contentFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Scaffold(
+              appBar: AppBar(),
+              body: const Center(child: CircularProgressIndicator()),
+            );
           }
+
           if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
-            return Center(
-                child: Text(
-                    'Error loading content: ${snapshot.error ?? 'Content not found.'}'));
+            return Scaffold(
+              appBar: AppBar(),
+              body: EmptyStateView(
+                icon: Icons.article_outlined,
+                title: 'Article Not Found',
+                message: 'This educational article could not be loaded.',
+                buttonText: 'Back to Guides',
+                onAction: () => Navigator.pop(context),
+              ),
+            );
           }
 
           final contentItem = snapshot.data!;
 
-          // --- Attempt to award points AFTER content is loaded ---
-          // Use addPostFrameCallback to avoid calling during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _attemptAwardPoints(contentItem.id);
           });
-          // --- End attempt ---
 
           final title =
               getLocalizedText(contentItem.titleEn, contentItem.titleBn);
           final content =
               getLocalizedText(contentItem.contentEn, contentItem.contentBn);
+          final bool hasImage = contentItem.imageUrl != null &&
+              contentItem.imageUrl!.trim().isNotEmpty;
 
-          // Use CustomScrollView for potentially collapsible AppBar with image
           return CustomScrollView(
             slivers: <Widget>[
               SliverAppBar(
-                title: Text(title.isNotEmpty ? title : "Details"),
-                pinned: true, // Keeps AppBar visible
-                expandedHeight: contentItem.imageUrl != null &&
-                        contentItem.imageUrl!.isNotEmpty
-                    ? 250.0
-                    : kToolbarHeight, // Expand more if image exists
-                flexibleSpace: (contentItem.imageUrl != null &&
-                        contentItem.imageUrl!.isNotEmpty)
+                pinned: true,
+                expandedHeight: hasImage ? 240.0 : 80.0,
+                leading: IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: hasImage ? Colors.black.withValues(alpha: 0.4) : Colors.transparent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                      color: hasImage ? Colors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                flexibleSpace: hasImage
                     ? FlexibleSpaceBar(
-                        background: Image.network(
-                          contentItem.imageUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                  color: Colors.grey[300],
-                                  child: Icon(Icons.broken_image,
-                                      color: Colors.grey[600])),
+                        background: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.network(
+                              contentItem.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                color: AppColors.primaryLight,
+                                child: const Icon(Icons.menu_book_rounded,
+                                    size: 64, color: AppColors.primary),
+                              ),
+                            ),
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.6),
+                                    Colors.transparent,
+                                  ],
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       )
-                    : null, // No flexible space if no image
+                    : null,
               ),
-              // Use SliverPadding for content padding
               SliverPadding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
                 sliver: SliverToBoxAdapter(
-                  // Use SliverToBoxAdapter for single child
-                  child: Text(
-                    content.isNotEmpty ? content : "No content available.",
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontSize: 16,
-                        height:
-                            1.6), // Slightly larger text, better line height
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Category Tag & Points Pill
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              contentItem.category.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryDark,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.star_rounded,
+                                    color: Color(0xFFD97706), size: 16),
+                                SizedBox(width: 4),
+                                Text(
+                                  '+1 Life Point',
+                                  style: TextStyle(
+                                    color: Color(0xFF92400E),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Article Title
+                      Text(
+                        title.isNotEmpty ? title : "Educational Guide",
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.4,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(color: AppColors.border, height: 1),
+                      const SizedBox(height: 20),
+
+                      // Article Content Text
+                      Text(
+                        content.isNotEmpty
+                            ? content
+                            : "Detailed guide content will be updated soon.",
+                        style: const TextStyle(
+                          fontSize: 16,
+                          height: 1.7,
+                          color: Color(0xFF334155),
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
                   ),
                 ),
               ),

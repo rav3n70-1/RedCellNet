@@ -1,14 +1,16 @@
 // lib/features/profile/presentation/pages/edit_profile_page.dart
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:red_cell_net_final/features/profile/data/services/user_profile_service.dart';
 import 'dart:async';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:red_cell_net_final/core/services/supabase_auth_service.dart';
+import 'package:red_cell_net_final/core/theme/app_theme.dart';
+import 'package:red_cell_net_final/core/widgets/common_widgets.dart';
+import 'package:red_cell_net_final/features/profile/data/services/user_profile_service.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
+
   @override
   State<EditProfilePage> createState() => _EditProfilePageState();
 }
@@ -16,7 +18,7 @@ class EditProfilePage extends StatefulWidget {
 class _EditProfilePageState extends State<EditProfilePage> {
   final _formKey = GlobalKey<FormState>();
   final _profileService = UserProfileService();
-  final _currentUser = FirebaseAuth.instance.currentUser;
+  String? get _currentUserId => SupabaseAuthService().currentUserId;
 
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
@@ -56,7 +58,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> _loadUserData() async {
-    /* ... Load data ... */ if (_currentUser == null) {
+    final uid = _currentUserId;
+    if (uid == null) {
       setState(() {
         _errorMessage = "Not logged in.";
         _isLoading = false;
@@ -64,62 +67,50 @@ class _EditProfilePageState extends State<EditProfilePage> {
       return;
     }
     try {
-      final userDoc = await _profileService.getUserProfile(_currentUser!.uid);
+      final userDoc = await _profileService.getUserProfile(uid);
       final userData = userDoc.data();
       if (userData != null) {
         _nameController.text = userData['name'] ?? '';
         _phoneController.text = userData['phoneNumber'] ?? '';
         _cityController.text = userData['locationCity'] ?? '';
-        String? currentBloodType = userData['bloodType'];
-        if (currentBloodType != null &&
-            _bloodTypes.contains(currentBloodType)) {
+        final String? currentBloodType = userData['bloodType'];
+        if (currentBloodType != null && _bloodTypes.contains(currentBloodType)) {
           _selectedBloodType = currentBloodType;
-        } else {
-          _selectedBloodType = null;
         }
-      } else {
-        _errorMessage = "Profile data empty.";
       }
-    } on Exception catch (e) {
-      print("Error loading user data: $e");
-      _errorMessage = e.toString();
     } catch (e) {
-      print("Generic error loading: $e");
-      _errorMessage = "Failed to load profile.";
+      debugPrint("Error loading profile: $e");
+      _errorMessage = "Could not load profile details.";
     } finally {
-      if (mounted)
-        setState(() {
-          _isLoading = false;
-        });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _saveProfile() async {
-    /* ... Save profile logic ... */ FocusScope.of(context).unfocus();
-    setState(() {
-      _errorMessage = null;
-    });
+    FocusScope.of(context).unfocus();
+    setState(() => _errorMessage = null);
+
     if (_formKey.currentState!.validate()) {
-      if (_currentUser == null) {
-        return;
-      }
-      setState(() {
-        _isSaving = true;
-      });
+      final uid = _currentUserId;
+      if (uid == null) return;
+
+      setState(() => _isSaving = true);
       final String newName = _nameController.text.trim();
       final String? newBloodType = _selectedBloodType;
       final String newCity = _cityController.text.trim();
       final String newPhone = _phoneController.text.trim();
+
       bool profileWillBeComplete =
           newName.isNotEmpty && newBloodType != null && newCity.isNotEmpty;
       bool awardBadgeAndPoints = false;
       int currentPoints = 0;
       const String profileCompleteBadgeId = "Profile Complete";
       const int pointsForCompletion = 5;
+
       if (profileWillBeComplete) {
         try {
           final userDoc =
-              await _profileService.getUserProfile(_currentUser!.uid);
+              await _profileService.getUserProfile(uid);
           final userData = userDoc.data();
           if (userData != null) {
             final List<dynamic> currentBadges = userData['badges'] ?? [];
@@ -130,119 +121,176 @@ class _EditProfilePageState extends State<EditProfilePage> {
             }
           }
         } catch (e) {
-          print("Err fetch badges/pts: $e");
+          debugPrint("Badge check error: $e");
         }
       }
+
       final Map<String, dynamic> updatedData = {
         'name': newName,
         'phoneNumber': newPhone,
         'locationCity': newCity,
-        'bloodType': newBloodType
+        'bloodType': newBloodType,
       };
+
       if (awardBadgeAndPoints) {
-        updatedData['badges'] = FieldValue.arrayUnion([profileCompleteBadgeId]);
+        final List<dynamic> updatedBadges = List<dynamic>.from(
+            (await _profileService.getUserProfile(uid)).data()?['badges'] ?? []);
+        if (!updatedBadges.contains(profileCompleteBadgeId)) {
+          updatedBadges.add(profileCompleteBadgeId);
+        }
+        updatedData['badges'] = updatedBadges;
         updatedData['points'] = currentPoints + pointsForCompletion;
-        print("Adding Profile Complete badge/points.");
       }
+
       String? finalErrorMessage;
       bool submissionSuccess = false;
+
       try {
-        await _profileService.updateUserProfile(_currentUser!.uid, updatedData);
+        await _profileService.updateUserProfile(uid, updatedData);
         submissionSuccess = true;
-        print("Profile updated.");
       } catch (e) {
-        print("Error saving profile: $e");
-        finalErrorMessage = "Failed to save profile.";
+        debugPrint("Error updating profile: $e");
+        finalErrorMessage = "Failed to save profile. Please try again.";
       } finally {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _isSaving = false;
             _errorMessage = finalErrorMessage;
           });
+        }
       }
+
       if (submissionSuccess && mounted) {
-        String successMessage = "Profile updated!";
+        String successMessage = "Profile updated successfully!";
         if (awardBadgeAndPoints) {
-          successMessage += "\n+${pointsForCompletion}pts & Badge earned!";
+          successMessage += "\n🎉 +$pointsForCompletion Life Points & Profile Complete Badge earned!";
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(successMessage), backgroundColor: Colors.green),
+            content: Text(successMessage),
+            backgroundColor: AppColors.success,
+          ),
         );
-        print("Save successful. Attempting pop...");
-        await Future.delayed(const Duration(milliseconds: 50));
-        if (mounted) Navigator.of(context).pop();
-        print("Edit page popped.");
+        Navigator.of(context).pop();
       }
     } else {
-      if (mounted)
-        setState(() {
-          _errorMessage = "Check required fields.";
-        });
+      if (mounted) {
+        setState(() => _errorMessage = "Please fill all required fields.");
+      }
     }
   }
 
   // --- OCR: Scan Blood Report ---
   Future<void> _scanBloodReport() async {
     if (_isProcessingOcr || _isSaving) return;
+
     setState(() {
       _isProcessingOcr = true;
       _errorMessage = null;
     });
+
     final ImagePicker picker = ImagePicker();
-    XFile? image;
     ImageSource? source;
+
     if (mounted) {
-      source = await showDialog<ImageSource>(
-          context: context,
-          builder: (context) => AlertDialog(
-                title: Text("Scan Blood Report"),
-                content: Text("Choose image source:"),
-                actions: [
-                  TextButton(
-                      child: Text("Camera"),
-                      onPressed: () =>
-                          Navigator.pop(context, ImageSource.camera)),
-                  TextButton(
-                      child: Text("Gallery"),
-                      onPressed: () =>
-                          Navigator.pop(context, ImageSource.gallery)),
-                ],
-              ));
+      source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Scan Blood Report (OCR)',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Take a photo or upload an image of your lab report to auto-detect your blood group.',
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.camera_alt_rounded,
+                        color: AppColors.primary),
+                  ),
+                  title: const Text('Capture with Camera',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  onTap: () => Navigator.pop(context, ImageSource.camera),
+                ),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.photo_library_rounded,
+                        color: AppColors.secondary),
+                  ),
+                  title: const Text('Upload from Gallery',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  onTap: () => Navigator.pop(context, ImageSource.gallery),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
+
     if (source == null) {
       if (mounted) setState(() => _isProcessingOcr = false);
       return;
     }
+
+    XFile? image;
     try {
       image = await picker.pickImage(source: source);
     } catch (e) {
-      print("Error picking image: $e");
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text("Error picking image: $e"),
-            backgroundColor: Colors.red));
+            backgroundColor: AppColors.critical,
+          ),
+        );
+      }
     }
+
     if (image == null) {
-      if (mounted)
-        setState(() {
-          _isProcessingOcr = false;
-        });
+      if (mounted) setState(() => _isProcessingOcr = false);
       return;
     }
-    print("Image picked: ${image.path}");
+
     final InputImage inputImage = InputImage.fromFilePath(image.path);
     TextRecognizer? textRecognizer;
+
     try {
-      print("Processing image with ML Kit...");
       textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
       final RecognizedText recognizedText =
           await textRecognizer.processImage(inputImage);
       await textRecognizer.close();
-      String detectedText = recognizedText.text;
-      print("OCR Result:\n---\n${detectedText}\n---");
-      // Use the UPDATED parsing logic (Attempt 9)
-      String? foundBloodType = _findBloodTypeInText(detectedText);
+
+      final String detectedText = recognizedText.text;
+      final String? foundBloodType = _findBloodTypeInText(detectedText);
+
       if (mounted) {
         if (foundBloodType != null) {
           _showConfirmationDialog(foundBloodType);
@@ -250,12 +298,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text("Scan Unsuccessful"),
+              title: const Text("No Blood Group Detected"),
               content: const Text(
-                  "Sorry, unable to automatically detect a blood type from the report. Please update your profile manually.\n\nThank you!"),
+                "Could not clearly identify a blood group from the image. Please select your blood group manually below.",
+              ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.pop(context),
                   child: const Text("OK"),
                 ),
               ],
@@ -264,302 +313,411 @@ class _EditProfilePageState extends State<EditProfilePage> {
         }
       }
     } catch (e) {
-      print("Error OCR: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("Error processing image: $e"),
-            backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error processing document: $e"),
+            backgroundColor: AppColors.critical,
+          ),
+        );
       }
     } finally {
       await textRecognizer?.close();
-      print("Recognizer closed.");
-      if (mounted)
-        setState(() {
-          _isProcessingOcr = false;
-        });
+      if (mounted) setState(() => _isProcessingOcr = false);
     }
   }
 
-  // --- UPDATED OCR: Find Blood Type Helper (Attempt 9 - Refined Global Scan) ---
   String? _findBloodTypeInText(String text) {
     if (text.isEmpty) return null;
-    // Normalize: Uppercase, remove colons/ampersands, keep single spaces
     String searchableText = text
         .toUpperCase()
         .replaceAll(':', '')
         .replaceAll('&', '')
         .replaceAll(RegExp(r'\s+'), ' ');
-    print("Searching in (normalized): $searchableText");
 
-    String? aboGroup;
-    String? rhFactorSymbol;
-    int searchRadius = 40; // How many characters ahead to look
-
-    // --- Strategy 1: Explicit Label + Value Together ---
     final RegExp patternExplicit = RegExp(
         r'\b(BLOOD GROUP|BLOOD TYPE|GROUP)\s?(A|B|AB|O)\s?(\+|-|POSITIVE|NEGATIVE|POS|NEG)\b');
     Match? explicitMatch = patternExplicit.firstMatch(searchableText);
     if (explicitMatch != null) {
-      aboGroup = explicitMatch.group(2);
-      rhFactorSymbol = _normalizeRh(explicitMatch.group(3));
-      print("Strategy 1 Match: $aboGroup$rhFactorSymbol");
-      if (aboGroup != null &&
-          rhFactorSymbol != null &&
-          _bloodTypes.contains(aboGroup + rhFactorSymbol))
-        return aboGroup + rhFactorSymbol;
-      aboGroup = null;
-      rhFactorSymbol = null;
+      final abo = explicitMatch.group(2);
+      final rh = _normalizeRh(explicitMatch.group(3));
+      if (abo != null && _bloodTypes.contains(abo + rh)) {
+        return abo + rh;
+      }
     }
 
-    // --- Strategy 2: Find Keywords then Search Nearby Area (Keep this minimal check if needed) ---
-    // This might still be unreliable due to varying formats
-    // final aboLabelRegex = RegExp(r'\b(ABO|BLOOD GROUP)\b'); Match? aboLabelMatch = aboLabelRegex.firstMatch(searchableText); if (aboLabelMatch != null) { /* ... */ }
-    // final rhLabelRegex = RegExp(r'\b(RH|ANTI D|D ANTIGEN)\b'); Match? rhLabelMatch = rhLabelRegex.firstMatch(searchableText); if (rhLabelMatch != null) { /* ... */ }
-    // if (aboGroup != null && rhFactorSymbol != null) { /* ... return combined if valid ... */ }
-    // else { print("Could not determine from Strategy 1. Falling back..."); aboGroup = null; rhFactorSymbol = null; }
-
-    // --- Strategy 3: Global Scan & Count (Refined Rh Check) ---
-    print("Attempting Global Scan & Count strategy...");
-    // Find ABO
     final aboRegex = RegExp(r'\b(AB|A|B|O)\b');
     final aboMatches =
         aboRegex.allMatches(searchableText).map((m) => m.group(1)!).toSet();
-    print("Global Scan Found ABO candidates: ${aboMatches.toList()}");
 
-    // Find Rh (Prioritize words, then symbols, avoid symbol-digit)
-    Set<String> uniqueRh = {};
     final rhTextRegex = RegExp(r'\b(POSITIVE|NEGATIVE|POS|NEG)\b');
     final rhTextMatches = rhTextRegex
         .allMatches(searchableText)
         .map((m) => _normalizeRh(m.group(1)))
         .toSet();
-    print("Global Scan Found Rh Text candidates: ${rhTextMatches.toList()}");
 
-    final rhSymbolRegex =
-        RegExp(r'(\+|-)(?!\d)'); // Symbol NOT followed by digit
+    final rhSymbolRegex = RegExp(r'(\+|-)(?!\d)');
     final rhSymbolMatches = rhSymbolRegex
         .allMatches(searchableText)
         .map((m) => _normalizeRh(m.group(1)))
         .toSet();
-    print(
-        "Global Scan Found Rh Symbol candidates: ${rhSymbolMatches.toList()}");
 
-    // Determine unique Rh factor
+    Set<String> uniqueRh = {};
     if (rhTextMatches.length == 1) {
-      uniqueRh = rhTextMatches; // Prioritize text match if unique
-      print("Using unique Rh Text match: $uniqueRh");
+      uniqueRh = rhTextMatches;
     } else if (rhTextMatches.isEmpty && rhSymbolMatches.length == 1) {
-      uniqueRh = rhSymbolMatches; // Use symbol if unique and no text match
-      print("Using unique Rh Symbol match: $uniqueRh");
-    } else {
-      print(
-          "Rh factor is ambiguous: Found ${rhTextMatches.length} text matches and ${rhSymbolMatches.length} symbol matches.");
+      uniqueRh = rhSymbolMatches;
     }
 
-    // Combine if exactly one unique ABO and one unique Rh found
     if (aboMatches.length == 1 && uniqueRh.length == 1) {
-      aboGroup = aboMatches.first;
-      rhFactorSymbol = uniqueRh.first;
-      String combinedType = aboGroup + rhFactorSymbol;
-      print("Found unique combination via Global Scan: $combinedType");
-      if (_bloodTypes.contains(combinedType))
-        return combinedType;
-      else
-        print("Combined type '$combinedType' not standard.");
-    } else {
-      print(
-          "Global Scan did not find exactly one unique ABO (${aboMatches.length}) and one unique Rh (${uniqueRh.length}).");
+      final combined = aboMatches.first + uniqueRh.first;
+      if (_bloodTypes.contains(combined)) return combined;
     }
 
-    // --- Strategy 4: Simple Standalone patterns (Final Fallback - less reliable) ---
-    // print("Falling back to simple pattern search...");
-    // if (RegExp(r'\bA\s?\+\b').hasMatch(searchableText) || RegExp(r'\bA\s?POS\b').hasMatch(searchableText)) return "A+";
-    // ... rest of simple patterns ...
-
-    print("Blood type pattern not found after all strategies.");
-    return null; // Final fallback - not found
+    return null;
   }
 
-  // Helper to normalize Rh factor
   String _normalizeRh(String? rhText) {
     if (rhText == null) return '-';
     String upperRh = rhText.toUpperCase();
     if (upperRh == '+' || upperRh == 'POS' || upperRh == 'POSITIVE') return '+';
     if (upperRh == '-' || upperRh == 'NEG' || upperRh == 'NEGATIVE') return '-';
-    print("Unrecognized Rh: '$rhText'");
     return '-';
   }
-  // --- End Find Blood Type Helper ---
 
-  // --- OCR: Confirmation Dialog ---
   Future<void> _showConfirmationDialog(String detectedBloodType) async {
-    /* ... Same as before ... */ if (!_bloodTypes.contains(detectedBloodType)) {
-      print("Invalid detected: $detectedBloodType");
-      return;
-    }
+    if (!_bloodTypes.contains(detectedBloodType)) return;
+
     final bool? confirm = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text("Confirm Blood Type"),
-        content: Text("Detected: $detectedBloodType\nUse this value?"),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: AppColors.success),
+            SizedBox(width: 8),
+            Text("Blood Group Detected!"),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "We recognized your blood type from the report:",
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            BloodGroupBadge(bloodType: detectedBloodType, size: 64),
+            const SizedBox(height: 16),
+            const Text(
+              "Would you like to set this as your profile blood group?",
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text("Cancel"),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text("Use Value"),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text("Use This Group"),
           ),
         ],
       ),
     );
-    if (confirm == true && mounted) {
-      setState(() {
-        _selectedBloodType = detectedBloodType;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Blood type set to $detectedBloodType."),
-          backgroundColor: Colors.green));
-    }
-  }
 
-  // Helper for Save button
-  Widget _buildSaveButton() {
-    bool isBusy = _isSaving || _isProcessingOcr;
-    return isBusy
-        ? const Center(
-            child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 16.0),
-                child: CircularProgressIndicator()))
-        : ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16.0),
-                textStyle:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            onPressed: _saveProfile,
-            child: const Text('Save Changes'),
-          );
+    if (confirm == true && mounted) {
+      setState(() => _selectedBloodType = detectedBloodType);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Blood group updated to $detectedBloodType."),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    bool enableForm = !_isLoading && !_isSaving && !_isProcessingOcr;
+    final bool enableForm = !_isLoading && !_isSaving && !_isProcessingOcr;
+
     return Scaffold(
+      backgroundColor: AppColors.scaffoldBackground,
       appBar: AppBar(
-        title: const Text('Edit Profile'),
+        title: const Text('Edit Donor Profile'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: _isLoading
-          ? Center(
-              child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const CircularProgressIndicator(),
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  Text(_errorMessage!,
-                      style: const TextStyle(color: Colors.red)),
-                ]
-              ],
-            ))
+          ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 18.0, vertical: 16.0),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    // Form fields...
-                    TextFormField(
-                      controller: _nameController,
-                      enabled: enableForm,
-                      decoration: const InputDecoration(
-                        labelText: 'Full Name',
-                        prefixIcon: Icon(Icons.person_outline),
-                      ),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Please enter name'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _phoneController,
-                      enabled: enableForm,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone Number (Optional)',
-                        prefixIcon: Icon(Icons.phone_outlined),
-                      ),
-                      keyboardType: TextInputType.phone,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _cityController,
-                      enabled: enableForm,
-                      decoration: const InputDecoration(
-                        labelText: 'City / Area (e.g., Dhaka)',
-                        prefixIcon: Icon(Icons.location_city_outlined),
-                      ),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Please enter city'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _selectedBloodType,
-                      hint: const Text('Select Blood Type'),
-                      icon: const Icon(Icons.arrow_drop_down),
-                      decoration: const InputDecoration(
-                        labelText: 'Blood Type',
-                        prefixIcon: Icon(Icons.bloodtype_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _bloodTypes
-                          .map<DropdownMenuItem<String>>(
-                              (v) => DropdownMenuItem(value: v, child: Text(v)))
-                          .toList(),
-                      onChanged: enableForm
-                          ? (v) => setState(() => _selectedBloodType = v)
-                          : null,
-                      validator: (v) =>
-                          v == null ? 'Please select blood type' : null,
-                    ),
-                    const SizedBox(height: 8),
-                    // OCR Button / Loader
-                    _isProcessingOcr
-                        ? const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                                SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2)),
-                                SizedBox(width: 10),
-                                Text("Scanning...")
-                              ])
-                        : TextButton.icon(
-                            icon: const Icon(Icons.document_scanner_outlined),
-                            label: const Text("Scan Blood Type from Report"),
-                            style: TextButton.styleFrom(
-                                foregroundColor: Colors.redAccent),
-                            onPressed: _isSaving ? null : _scanBloodReport,
-                          ),
-                    const SizedBox(height: 16),
-                    const SizedBox(height: 32),
-                    if (_errorMessage != null && !_isLoading)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(
-                              color: Colors.red, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
+                  children: [
+                    // --- Error Alert Banner ---
+                    if (_errorMessage != null)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16.0),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14.0, vertical: 12.0),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline_rounded,
+                                color: AppColors.critical, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(
+                                  color: AppColors.critical,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    _buildSaveButton(),
+
+                    // --- Smart OCR Blood Report Card ---
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFF1F2), Color(0xFFFFE4E6)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                            color: AppColors.primaryAccent.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.document_scanner_rounded,
+                                color: AppColors.primary, size: 24),
+                          ),
+                          const SizedBox(width: 14),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Smart Blood Report OCR',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryDark,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Scan your lab report to auto-detect blood group',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed:
+                                enableForm ? () => _scanBloodReport() : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: _isProcessingOcr
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Scan',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // --- Personal Information Section ---
+                    Container(
+                      padding: const EdgeInsets.all(16.0),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Personal Details',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _nameController,
+                            enabled: enableForm,
+                            decoration: const InputDecoration(
+                              labelText: 'Full Name *',
+                              hintText: 'Your donor display name',
+                              prefixIcon: Icon(Icons.person_outline_rounded),
+                            ),
+                            validator: (v) => v == null || v.trim().isEmpty
+                                ? 'Please enter your name'
+                                : null,
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _phoneController,
+                            enabled: enableForm,
+                            keyboardType: TextInputType.phone,
+                            decoration: const InputDecoration(
+                              labelText: 'Phone Number',
+                              hintText: '+880 1XXXXXXXXX',
+                              prefixIcon: Icon(Icons.phone_outlined),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _cityController,
+                            enabled: enableForm,
+                            decoration: const InputDecoration(
+                              labelText: 'City / Area *',
+                              hintText: 'e.g. Dhanmondi, Dhaka',
+                              prefixIcon: Icon(Icons.location_on_outlined),
+                            ),
+                            validator: (v) => v == null || v.trim().isEmpty
+                                ? 'Please enter your city/area'
+                                : null,
+                          ),
+                          const SizedBox(height: 18),
+
+                          // Blood Group Selection Chips
+                          const Text(
+                            'Blood Group *',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _bloodTypes.map((type) {
+                              final isSelected = _selectedBloodType == type;
+                              return ChoiceChip(
+                                label: Text(type),
+                                selected: isSelected,
+                                selectedColor: AppColors.primary,
+                                backgroundColor: AppColors.primaryLight,
+                                labelStyle: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppColors.primaryDark,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  side: BorderSide(
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : Colors.transparent,
+                                  ),
+                                ),
+                                onSelected: enableForm
+                                    ? (selected) {
+                                        setState(() {
+                                          _selectedBloodType =
+                                              selected ? type : null;
+                                        });
+                                      }
+                                    : null,
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Save Button
+                    SizedBox(
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: enableForm ? _saveProfile : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 3,
+                          shadowColor: AppColors.primary.withValues(alpha: 0.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: _isSaving
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Save Profile',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),

@@ -1,5 +1,4 @@
 // lib/features/educational_content/data/models/content_item.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ContentItem {
   final String id;
@@ -8,8 +7,10 @@ class ContentItem {
   final String contentEn;
   final String contentBn;
   final String category;
-  final String? imageUrl; // Nullable
-  final int? order; // Nullable
+  final String? imageUrl;
+  final int? order;
+  final int readTimeMinutes;
+  final int pointsValue;
 
   ContentItem({
     required this.id,
@@ -20,27 +21,23 @@ class ContentItem {
     required this.category,
     this.imageUrl,
     this.order,
+    this.readTimeMinutes = 3,
+    this.pointsValue = 1,
   });
 
-  // Factory constructor to create a ContentItem from a Firestore document
-  factory ContentItem.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    if (data == null) {
-      // Handle cases where data might be unexpectedly null, though unlikely for existing docs
-      throw Exception("Document data was null for doc ID: ${doc.id}");
-    }
-
+  factory ContentItem.fromMap(Map<String, dynamic> data, {String? id}) {
+    final docId = id ?? data['id']?.toString() ?? '';
     return ContentItem(
-      id: doc.id,
-      titleEn:
-          data['title_en'] as String? ?? '', // Provide default value if null
-      titleBn: data['title_bn'] as String? ?? '',
-      contentEn: data['content_en'] as String? ?? '',
-      contentBn: data['content_bn'] as String? ?? '',
-      category: data['category'] as String? ?? 'Uncategorized',
-      imageUrl: data['imageUrl'] as String?, // Already nullable
-      order: data['order'] as int?, // Already nullable
+      id: docId,
+      titleEn: (data['title_en'] ?? data['titleEn']) as String? ?? '',
+      titleBn: (data['title_bn'] ?? data['titleBn']) as String? ?? '',
+      contentEn: (data['content_en'] ?? data['contentEn']) as String? ?? '',
+      contentBn: (data['content_bn'] ?? data['contentBn']) as String? ?? '',
+      category: data['category'] as String? ?? 'General',
+      imageUrl: (data['image_url'] ?? data['imageUrl']) as String?,
+      order: (data['order']) as int?,
+      readTimeMinutes: (data['read_time_minutes'] ?? data['readTimeMinutes']) as int? ?? 3,
+      pointsValue: (data['points_value'] ?? data['pointsValue']) as int? ?? 1,
     );
   }
 }
