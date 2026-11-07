@@ -1,5 +1,5 @@
 // admin_panel/src/components/layout/Layout.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import type { NavigationTab } from './Sidebar';
@@ -25,17 +25,20 @@ export const Layout: React.FC<LayoutProps> = ({
   criticalRequestsCount = 0,
   pendingReportsCount = 0,
 }) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const totalAlerts = pendingVerificationsCount + criticalRequestsCount + pendingReportsCount;
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-      {/* Fixed Left Navigation */}
+      {/* Left Navigation (Desktop static + Mobile drawer) */}
       <Sidebar
         currentTab={currentTab}
         onSelectTab={onSelectTab}
         pendingVerificationsCount={pendingVerificationsCount}
         criticalRequestsCount={criticalRequestsCount}
         pendingReportsCount={pendingReportsCount}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
       />
 
       {/* Main Page Area */}
@@ -45,8 +48,9 @@ export const Layout: React.FC<LayoutProps> = ({
           onRefresh={onRefresh}
           isRefreshing={isRefreshing}
           totalAlerts={totalAlerts}
+          onOpenMobileMenu={() => setMobileMenuOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

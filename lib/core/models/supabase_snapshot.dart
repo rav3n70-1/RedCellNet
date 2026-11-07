@@ -19,17 +19,29 @@ class AppTimestamp {
   factory AppTimestamp.fromDate(DateTime dt) => AppTimestamp(dt);
   factory AppTimestamp.now() => AppTimestamp(DateTime.now());
 
-  factory AppTimestamp.fromValue(dynamic val) {
+  static AppTimestamp? tryFromValue(dynamic val) {
+    if (val == null) return null;
     if (val is AppTimestamp) return val;
     if (val is DateTime) return AppTimestamp(val);
-    if (val is String) {
-      try {
-        return AppTimestamp(DateTime.parse(val));
-      } catch (_) {
-        return AppTimestamp(DateTime.now());
-      }
+    if (val is int) {
+      // Distinguish seconds vs milliseconds epoch
+      final ms = val < 10000000000 ? val * 1000 : val;
+      return AppTimestamp(DateTime.fromMillisecondsSinceEpoch(ms));
     }
-    return AppTimestamp(DateTime.now());
+    if (val is num) {
+      final intVal = val.toInt();
+      final ms = intVal < 10000000000 ? intVal * 1000 : intVal;
+      return AppTimestamp(DateTime.fromMillisecondsSinceEpoch(ms));
+    }
+    if (val is String && val.trim().isNotEmpty) {
+      final parsed = DateTime.tryParse(val.trim());
+      if (parsed != null) return AppTimestamp(parsed.toLocal());
+    }
+    return null;
+  }
+
+  factory AppTimestamp.fromValue(dynamic val) {
+    return tryFromValue(val) ?? AppTimestamp(DateTime.now());
   }
 
   DateTime toDate() => dateTime;

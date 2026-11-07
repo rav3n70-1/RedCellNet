@@ -1,5 +1,6 @@
 // lib/features/educational_content/presentation/pages/content_detail_page.dart
 import 'package:flutter/material.dart';
+import 'package:red_cell_net_final/core/services/app_settings_service.dart';
 import 'package:red_cell_net_final/core/services/supabase_auth_service.dart';
 import 'package:red_cell_net_final/core/theme/app_theme.dart';
 import 'package:red_cell_net_final/core/widgets/common_widgets.dart';
@@ -29,26 +30,36 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
     _contentFuture = _contentService.getContentItem(widget.contentId);
   }
 
-  String getLocalizedText(String english, String bangla) {
-    final locale = Localizations.localeOf(context);
-    return locale.languageCode == 'bn' ? bangla : english;
+  String _localizedText(String english, String bangla) {
+    final isBn = Localizations.localeOf(context).languageCode == 'bn' ||
+        AppSettingsService().isBengali;
+    if (isBn && bangla.trim().isNotEmpty) {
+      return bangla;
+    }
+    return english;
   }
 
   Future<void> _attemptAwardPoints(String contentId) async {
     if (_pointsAwardedAttempted) return;
-    setState(() => _pointsAwardedAttempted = true);
+    _pointsAwardedAttempted = true;
 
     final String? currentUserId = SupabaseAuthService().currentUserId;
     if (currentUserId == null || contentId.isEmpty) return;
 
-    final bool awarded = await _profileService.awardPointsForViewingContent(
+    final res = await _profileService.awardPointsForViewingContentDetailed(
         currentUserId, contentId);
 
-    if (awarded && mounted) {
+    if (res['awarded'] == true && mounted) {
+      final int pts = int.tryParse('${res['points_added'] ?? 5}') ?? 5;
+      final String? badge = res['badge_unlocked']?.toString();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("🎉 +1 Life Point earned for reading this article!"),
-          duration: Duration(seconds: 3),
+        SnackBar(
+          content: Text(
+            badge != null && badge.isNotEmpty
+                ? 'Badge Unlocked: "$badge" (+$pts recognition points)!'
+                : '+$pts recognition points recorded for completing this guide.',
+          ),
+          duration: const Duration(seconds: 3),
           backgroundColor: AppColors.success,
         ),
       );
@@ -57,13 +68,16 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = AppColors.isDark(context);
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.scaffoldOf(context),
       body: FutureBuilder<ContentItem?>(
         future: _contentFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Scaffold(
+              backgroundColor: AppColors.scaffoldOf(context),
               appBar: AppBar(),
               body: const Center(child: CircularProgressIndicator()),
             );
@@ -71,6 +85,7 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
 
           if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
             return Scaffold(
+              backgroundColor: AppColors.scaffoldOf(context),
               appBar: AppBar(),
               body: EmptyStateView(
                 icon: Icons.article_outlined,
@@ -89,9 +104,13 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
           });
 
           final title =
-              getLocalizedText(contentItem.titleEn, contentItem.titleBn);
+              _localizedText(contentItem.titleEn, contentItem.titleBn);
           final content =
-              getLocalizedText(contentItem.contentEn, contentItem.contentBn);
+              _localizedText(contentItem.contentEn, contentItem.contentBn);
+          final bool showingFallbackEnglish = (AppSettingsService().isBengali ||
+                  Localizations.localeOf(context).languageCode == 'bn') &&
+              contentItem.contentBn.trim().isEmpty &&
+              contentItem.contentEn.trim().isNotEmpty;
           final bool hasImage = contentItem.imageUrl != null &&
               contentItem.imageUrl!.trim().isNotEmpty;
 
@@ -104,13 +123,19 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
                   icon: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: hasImage ? Colors.black.withValues(alpha: 0.4) : Colors.transparent,
+                      color: hasImage
+                          ? Colors.black.withValues(alpha: 0.4)
+                          : (isDark
+                              ? AppColors.surfaceMutedOf(context)
+                              : Colors.transparent),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.arrow_back_ios_new_rounded,
                       size: 18,
-                      color: hasImage ? Colors.white : AppColors.textPrimary,
+                      color: hasImage
+                          ? Colors.white
+                          : AppColors.textPrimaryOf(context),
                     ),
                   ),
                   onPressed: () => Navigator.pop(context),
@@ -148,29 +173,41 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
                     : null,
               ),
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0, vertical: 16.0),
                 sliver: SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Category Tag & Points Pill
                       Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryLight,
+                              color: isDark
+                                  ? AppColors.primary.withValues(alpha: 0.25)
+                                  : AppColors.primaryLight,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               contentItem.category.toUpperCase(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primaryDark,
+                                color: isDark
+                                    ? AppColors.primaryLight
+                                    : AppColors.primaryDark,
                                 letterSpacing: 0.5,
                               ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${contentItem.readTimeMinutes} min read',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textMutedOf(context),
                             ),
                           ),
                           const Spacer(),
@@ -178,18 +215,23 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFEF3C7),
+                              color: isDark
+                                  ? const Color(0xFF78350F)
+                                      .withValues(alpha: 0.4)
+                                  : const Color(0xFFFEF3C7),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Row(
+                            child: Row(
                               children: [
-                                Icon(Icons.star_rounded,
+                                const Icon(Icons.star_rounded,
                                     color: Color(0xFFD97706), size: 16),
-                                SizedBox(width: 4),
+                                const SizedBox(width: 4),
                                 Text(
-                                  '+1 Life Point',
+                                  '+${contentItem.pointsValue} Pts',
                                   style: TextStyle(
-                                    color: Color(0xFF92400E),
+                                    color: isDark
+                                        ? const Color(0xFFFCD34D)
+                                        : const Color(0xFF92400E),
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -201,31 +243,84 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Article Title
                       Text(
                         title.isNotEmpty ? title : "Educational Guide",
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
+                          color: AppColors.textPrimaryOf(context),
                           letterSpacing: -0.4,
                           height: 1.3,
                         ),
                       ),
+                      if (showingFallbackEnglish) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'বাংলা অনুবাদ শীঘ্রই যুক্ত হবে — ইংরেজি সংস্করণ দেখানো হচ্ছে।',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textMutedOf(context),
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
-                      const Divider(color: AppColors.border, height: 1),
+                      Divider(color: AppColors.borderOf(context), height: 1),
                       const SizedBox(height: 20),
 
-                      // Article Content Text
                       Text(
                         content.isNotEmpty
                             ? content
                             : "Detailed guide content will be updated soon.",
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           height: 1.7,
-                          color: Color(0xFF334155),
+                          color: isDark
+                              ? const Color(0xFFCBD5E1)
+                              : const Color(0xFF334155),
                           letterSpacing: 0.1,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Source Attribution & Clinical Disclaimer Card
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceMutedOf(context),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.borderOf(context)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.verified_outlined,
+                                    size: 16, color: AppColors.secondary),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Reference: ${contentItem.sourceAttribution}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimaryOf(context),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              contentItem.medicalDisclaimer,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.textSecondaryOf(context),
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 40),

@@ -11,6 +11,9 @@ import {
   PlusCircle,
   Database,
   CheckCircle2,
+  UserCheck,
+  Clock,
+  BarChart3,
 } from 'lucide-react';
 import type { BloodRequest, DonationCenter, ReportItem, UserProfile } from '../types';
 import { StatCard } from '../components/common/StatCard';
@@ -21,6 +24,7 @@ import type { NavigationTab } from '../components/layout/Sidebar';
 import { Modal } from '../components/common/Modal';
 import { BloodGroupBadge, StatusBadge, UrgencyBadge } from '../components/common/Badge';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DashboardPageProps {
   donors: UserProfile[];
@@ -39,68 +43,71 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
   onRefresh,
 }) => {
+  const { user, isSuperAdmin } = useAuth();
   const [selectedRequest, setSelectedRequest] = useState<BloodRequest | null>(null);
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedSuccess, setSeedSuccess] = useState(false);
 
-  // Derived metrics
-  const totalDonors = donors.length;
+  // Derived Section 6 KPI metrics
+  const totalUsers = donors.length;
   const verifiedDonors = donors.filter((d) => d.verification_status === 'verified').length;
-  const pendingVerifications = donors.filter((d) => d.verification_status === 'pending').length;
-  const activeRequests = requests.filter((r) => r.status === 'Open' || r.status === 'Partially Fulfilled').length;
-  const criticalRequests = requests.filter(
-    (r) => (r.status === 'Open' || r.status === 'Partially Fulfilled') && r.urgency_level === 'Critical'
+  const availableDonors = donors.filter(
+    (d) => Boolean(d.is_available_to_donate) && !d.is_banned
   ).length;
+  const pendingVerifications = donors.filter((d) => d.verification_status === 'pending').length;
+
+  const activeRequests = requests.filter(
+    (r) => r.status === 'Open' || r.status === 'Partially Fulfilled'
+  ).length;
+  const criticalRequests = requests.filter(
+    (r) =>
+      (r.status === 'Open' || r.status === 'Partially Fulfilled') && r.urgency_level === 'Critical'
+  ).length;
+  const fulfilledRequests = requests.filter((r) => r.status === 'Fulfilled').length;
+  const expiredRequests = requests.filter((r) => r.status === 'Expired').length;
   const pendingReports = reports.filter((r) => r.status === 'pending').length;
 
   const handleResolveReport = async (
     reportId: string,
     action: 'dismiss' | 'action_taken',
-    targetId: string
+    _targetId: string
   ) => {
     try {
-      if (action === 'action_taken') {
-        // Cancel the reported request
-        await supabase
-          .from('blood_requests')
-          .update({
-            status: 'Cancelled',
-            cancellation_reason: 'Removed following moderation report',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', targetId);
-      }
-
-      await supabase
-        .from('reports')
-        .update({
-          status: action,
-          resolved_at: new Date().toISOString(),
-        })
-        .eq('id', reportId);
-
+      const { error } = await supabase.rpc('resolve_moderation_report', {
+        p_report_id: reportId,
+        p_action: action,
+        p_notes:
+          action === 'action_taken'
+            ? 'Action enforced from Operations Dashboard.'
+            : 'Dismissed from Operations Dashboard.',
+      });
+      if (error) throw error;
       onRefresh();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error resolving report:', err);
+      alert(err instanceof Error ? err.message : 'Failed to resolve report.');
     }
   };
 
-  // Seed sample data for testing and demonstration
+  // Seed sample data (Super Admin only, passing valid requester_user_id & checking errors)
   const handleSeedDemoData = async () => {
+    if (!user || !isSuperAdmin) return;
     setIsSeeding(true);
     try {
-      // 1. Seed demo requests if empty
       if (requests.length === 0) {
-        await supabase.from('blood_requests').insert([
+        const { error: reqErr } = await supabase.from('blood_requests').insert([
           {
+            requester_user_id: user.id,
             patient_name: 'Tanvir Hossain',
             hospital_name: 'Dhaka Medical College Hospital',
             hospital_address: 'Secretariat Rd, Dhaka 1000',
             city: 'Dhaka',
+            latitude: 23.7258,
+            longitude: 90.3976,
             required_blood_type: 'O-',
             required_units: 3,
-            accepted_units: 1,
-            remaining_units: 2,
+            accepted_units: 0,
+            remaining_units: 3,
             contact_phone: '+8801711223344',
             urgency_level: 'Critical',
             reason: 'Emergency cardiovascular surgery',
@@ -108,24 +115,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             status: 'Open',
             expiry_hours: 24,
             expiry_at: new Date(Date.now() + 24 * 3600000).toISOString(),
-            offers: [
-              {
-                id: 'offer-1',
-                donorId: 'donor-1',
-                donorName: 'Dr. Rafiqul Islam',
-                donorBloodType: 'O-',
-                offeredUnits: 1,
-                status: 'pending',
-                offerTimestamp: new Date().toISOString(),
-              },
-            ],
             created_at: new Date().toISOString(),
           },
           {
+            requester_user_id: user.id,
             patient_name: 'Sabrina Akter',
             hospital_name: 'Square Hospitals Ltd.',
             hospital_address: '18/F Bir Uttam Qazi Nuruzzaman Sarak, Dhaka',
             city: 'Dhaka',
+            latitude: 23.7528,
+            longitude: 90.3816,
             required_blood_type: 'A+',
             required_units: 2,
             accepted_units: 0,
@@ -139,46 +138,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             expiry_at: new Date(Date.now() + 48 * 3600000).toISOString(),
             created_at: new Date().toISOString(),
           },
-          {
-            patient_name: 'Fahim Ahmed',
-            hospital_name: 'Chittagong Medical College',
-            hospital_address: '57 K.B. Fazlul Kader Rd, Chattogram',
-            city: 'Chattogram',
-            required_blood_type: 'B+',
-            required_units: 1,
-            accepted_units: 1,
-            remaining_units: 0,
-            contact_phone: '+8801933445566',
-            urgency_level: 'Medium',
-            reason: 'Thalassemia scheduled transfusion',
-            is_emergency: false,
-            status: 'Fulfilled',
-            expiry_hours: 72,
-            created_at: new Date().toISOString(),
-          },
         ]);
+        if (reqErr) throw reqErr;
       }
 
-      // 2. Seed demo reports if empty
-      if (reports.length === 0) {
-        await supabase.from('reports').insert([
-          {
-            reporter_user_id: 'user-demo-1',
-            reported_type: 'request',
-            target_id: 'test-target-id',
-            reason: 'Duplicate or spam request',
-            details: 'The same phone number was posted multiple times with different names.',
-            status: 'pending',
-            created_at: new Date().toISOString(),
-          },
-        ]);
-      }
+      await supabase.rpc('record_admin_log', {
+        p_action_type: 'seed_demo_requests',
+        p_target_type: 'system',
+        p_target_id: user.id,
+        p_details: {},
+      });
 
       setSeedSuccess(true);
       setTimeout(() => setSeedSuccess(false), 3000);
       onRefresh();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error seeding demo data:', err);
+      alert(err instanceof Error ? err.message : 'Failed to load sample data.');
     } finally {
       setIsSeeding(false);
     }
@@ -187,17 +163,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   return (
     <div className="space-y-8">
       {/* Quick Action Banner */}
-      <div className="bg-gradient-to-r from-red-600 via-rose-600 to-rose-700 rounded-3xl p-6 text-white shadow-xl shadow-red-900/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-red-700 via-red-600 to-rose-700 rounded-3xl p-6 text-white shadow-xl shadow-red-900/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <span className="text-xs uppercase font-extrabold tracking-wider bg-white/20 px-2.5 py-1 rounded-md text-white">
-            System Control Hub
+            Clinical Operations Hub
           </span>
           <h2 className="text-2xl font-black tracking-tight mt-2 text-white">
             RedCellNet Unified Administration
           </h2>
           <p className="text-sm text-red-100 max-w-xl mt-1">
-            Oversee blood distribution across hospitals, verify voluntary donors, monitor emergency
-            dispatches, and send community alerts.
+            Oversee hospital blood dispatches, verify laboratory donor certificates, monitor
+            regional availability, and enforce community safety.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -206,23 +182,30 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-red-700 hover:bg-red-50 font-bold rounded-xl text-sm shadow-md transition-colors"
           >
             <Send className="w-4 h-4 text-red-600" />
-            Send Broadcast Alert
+            Send Alert
+          </button>
+          <button
+            onClick={() => onNavigate('analytics')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-800/60 hover:bg-red-800/80 text-white font-semibold rounded-xl text-sm border border-red-400/30 transition-colors"
+          >
+            <BarChart3 className="w-4 h-4" />
+            Analytics
           </button>
           <button
             onClick={() => onNavigate('facilities')}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-800/60 hover:bg-red-800/80 text-white font-semibold rounded-xl text-sm border border-red-400/30 transition-colors"
           >
             <PlusCircle className="w-4 h-4" />
-            Add Blood Bank
+            Blood Banks
           </button>
-          {donors.length === 0 && requests.length === 0 && (
+          {isSuperAdmin && requests.length === 0 && (
             <button
               onClick={handleSeedDemoData}
               disabled={isSeeding}
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900/70 hover:bg-slate-900 text-white font-semibold rounded-xl text-sm border border-slate-700/50 transition-colors"
             >
               <Database className="w-4 h-4 text-amber-400" />
-              {isSeeding ? 'Seeding...' : 'Load Sample Data'}
+              {isSeeding ? 'Seeding...' : 'Load Sample Requests'}
             </button>
           )}
         </div>
@@ -231,33 +214,61 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       {seedSuccess && (
         <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center gap-2 animate-in fade-in">
           <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-          Sample emergency blood requests and moderation reports successfully loaded into Supabase!
+          Sample emergency blood requests successfully created!
         </div>
       )}
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* Primary KPI Stats Grid (10 Operational Indicators across 2 clean rows) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Active Requests"
           value={activeRequests}
-          subtitle="Currently open in hospitals"
+          subtitle="Open or partially fulfilled"
           icon={Droplets}
           color="red"
           onClick={() => onNavigate('requests')}
         />
         <StatCard
-          title="Critical Emergencies"
+          title="Critical Cases"
           value={criticalRequests}
-          subtitle="Needed within 2 hours"
+          subtitle="Immediate hospital need"
           icon={AlertTriangle}
           color="purple"
           trend={criticalRequests > 0 ? { value: 'Urgent', isPositive: false } : undefined}
           onClick={() => onNavigate('requests')}
         />
         <StatCard
-          title="Total Donors"
-          value={totalDonors}
-          subtitle={pendingVerifications > 0 ? `${pendingVerifications} awaiting review` : "Registered donor base"}
+          title="Fulfilled Cases"
+          value={fulfilledRequests}
+          subtitle="Completed transfusions"
+          icon={CheckCircle2}
+          color="emerald"
+          onClick={() => onNavigate('requests')}
+        />
+        <StatCard
+          title="Expired Cases"
+          value={expiredRequests}
+          subtitle="Past deadline window"
+          icon={Clock}
+          color="slate"
+          onClick={() => onNavigate('requests')}
+        />
+        <StatCard
+          title="Open Reports"
+          value={pendingReports}
+          subtitle="Awaiting moderation"
+          icon={ShieldAlert}
+          color="amber"
+          trend={
+            pendingReports > 0 ? { value: `${pendingReports} open`, isPositive: false } : undefined
+          }
+          onClick={() => onNavigate('reports')}
+        />
+
+        <StatCard
+          title="Total Users"
+          value={totalUsers}
+          subtitle="Registered community"
           icon={Users}
           color="blue"
           onClick={() => onNavigate('donors')}
@@ -265,27 +276,39 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <StatCard
           title="Verified Donors"
           value={verifiedDonors}
-          subtitle="Shield badge certified"
+          subtitle="Lab-verified shield badge"
           icon={ShieldCheck}
           color="emerald"
           onClick={() => onNavigate('donors')}
         />
         <StatCard
-          title="Certified Centers"
+          title="Available Donors"
+          value={availableDonors}
+          subtitle="Eligible & ready now"
+          icon={UserCheck}
+          color="blue"
+          onClick={() => onNavigate('donors')}
+        />
+        <StatCard
+          title="Pending Reviews"
+          value={pendingVerifications}
+          subtitle="Lab certificates in queue"
+          icon={ShieldCheck}
+          color="amber"
+          trend={
+            pendingVerifications > 0
+              ? { value: `${pendingVerifications} queued`, isPositive: false }
+              : undefined
+          }
+          onClick={() => onNavigate('donors')}
+        />
+        <StatCard
+          title="Blood Centers"
           value={facilities.length}
-          subtitle="Registered blood banks"
+          subtitle="Certified collection hubs"
           icon={Building2}
           color="slate"
           onClick={() => onNavigate('facilities')}
-        />
-        <StatCard
-          title="Pending Reports"
-          value={pendingReports}
-          subtitle="Requires moderation"
-          icon={ShieldAlert}
-          color="amber"
-          trend={pendingReports > 0 ? { value: `${pendingReports} flags`, isPositive: false } : undefined}
-          onClick={() => onNavigate('reports')}
         />
       </div>
 
@@ -312,7 +335,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           isOpen={true}
           onClose={() => setSelectedRequest(null)}
           title={`Blood Request: ${selectedRequest.patient_name}`}
-          subtitle={`${selectedRequest.hospital_name} • ${selectedRequest.city || 'Dhaka'}`}
+          subtitle={`${selectedRequest.hospital_name} • ${selectedRequest.city || 'Location on file'}`}
           maxWidth="lg"
         >
           <div className="space-y-4">
@@ -322,7 +345,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 <div>
                   <div className="text-xs font-bold text-slate-500 uppercase">Requirement</div>
                   <div className="text-sm font-extrabold text-slate-900">
-                    {selectedRequest.remaining_units} of {selectedRequest.required_units} Units Needed
+                    {selectedRequest.remaining_units} of {selectedRequest.required_units} Units
+                    Needed
                   </div>
                 </div>
               </div>

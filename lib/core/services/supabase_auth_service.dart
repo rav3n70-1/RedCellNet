@@ -13,7 +13,7 @@ class SupabaseAuthService {
 
   SupabaseClient get _client => SupabaseConfig.client;
 
-  /// Stream of authentication state changes (Signed in, Signed out, Token refreshed, etc.)
+  /// Stream of authentication state changes (Signed in, Signed out, Password recovery, etc.)
   Stream<AuthState> get onAuthStateChange {
     if (!SupabaseConfig.isInitialized) {
       return const Stream.empty();
@@ -41,13 +41,9 @@ class SupabaseAuthService {
     }
   }
 
-  /// Current user's unique Supabase ID.
   String? get currentUserId => currentUser?.id;
-
-  /// Current user's email address.
   String? get currentUserEmail => currentUser?.email;
 
-  /// Helper boolean indicating whether a valid session is present.
   bool get isAuthenticated {
     try {
       return currentSession != null;
@@ -56,16 +52,28 @@ class SupabaseAuthService {
     }
   }
 
-  /// Signs up a new user with email, password, and optional full name.
+  /// Signs up a new user with email, password, and optional initial donor metadata.
   Future<AuthResponse> signUp({
     required String email,
     required String password,
     String? name,
+    String? bloodType,
+    String? phoneNumber,
+    String? locationCity,
   }) async {
     final Map<String, dynamic> data = {};
     if (name != null && name.trim().isNotEmpty) {
       data['name'] = name.trim();
       data['full_name'] = name.trim();
+    }
+    if (bloodType != null && bloodType.trim().isNotEmpty) {
+      data['blood_type'] = bloodType.trim();
+    }
+    if (phoneNumber != null && phoneNumber.trim().isNotEmpty) {
+      data['phone_number'] = phoneNumber.trim();
+    }
+    if (locationCity != null && locationCity.trim().isNotEmpty) {
+      data['location_city'] = locationCity.trim();
     }
 
     try {
@@ -76,13 +84,16 @@ class SupabaseAuthService {
         emailRedirectTo: kIsWeb ? null : SupabaseConfig.authCallbackUrl,
       );
 
-      // If session is immediately created (e.g. email confirmations disabled),
-      // make sure profile record exists in public.profiles.
-      if (response.user != null) {
+      // Only ensure profile if session is active (authenticated RLS context).
+      // Database trigger `on_auth_user_created` also creates the row automatically.
+      if (response.user != null && response.session != null) {
         await _ensureProfileExists(
           userId: response.user!.id,
           email: response.user!.email ?? email,
-          name: name?.trim() ?? '',
+          name: name?.trim(),
+          bloodType: bloodType?.trim(),
+          phoneNumber: phoneNumber?.trim(),
+          locationCity: locationCity?.trim(),
         );
       }
 
@@ -93,7 +104,7 @@ class SupabaseAuthService {
     }
   }
 
-  /// Signs in an existing user with email and password.
+  /// Signs in an existing user with email and password without overwriting existing profile data.
   Future<AuthResponse> signInWithPassword({
     required String email,
     required String password,
@@ -148,7 +159,6 @@ class SupabaseAuthService {
     try {
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
-        // User cancelled the Google sign-in prompt
         return null;
       }
 
@@ -173,7 +183,7 @@ class SupabaseAuthService {
         await _ensureProfileExists(
           userId: response.user!.id,
           email: response.user!.email ?? googleUser.email,
-          name: googleUser.displayName ?? '',
+          name: googleUser.displayName,
         );
       }
 
@@ -198,7 +208,7 @@ class SupabaseAuthService {
     }
   }
 
-  /// Updates current user's password (e.g. after receiving password reset link).
+  /// Updates current user's password.
   Future<UserResponse> updatePassword(String newPassword) async {
     try {
       return await _client.auth.updateUser(
@@ -220,46 +230,25 @@ class SupabaseAuthService {
     }
   }
 
-  /// Helper to ensure a row in public.profiles exists for the user.
+  /// Safely ensures a row in `public.profiles` exists without EVER overwriting
+  /// existing points, badges, verification status, or donation history.
   Future<void> _ensureProfileExists({
     required String userId,
     required String email,
     String? name,
+    String? bloodType,
+    String? phoneNumber,
+    String? locationCity,
   }) async {
     try {
-      final existing = await _client
-          .from('profiles')
-          .select('id, name')
-          .eq('id', userId)
-          .maybeSingle();
-
-      if (existing == null) {
-        await _client.from('profiles').insert({
-          'id': userId,
-          'email': email,
-          'name': name ?? '',
-          'points': 0,
-          'badges': [],
-          'is_available_to_donate': false,
-        });
-      } else if (name != null &&
-          name.isNotEmpty &&
-          (existing['name'] == null ||
-              (existing['name'] as String).trim().isEmpty)) {
-        await _client
-            .from('profiles')
-            .update({'name': name})
-            .eq('id', userId);
-      }
-
-      // Also ensure Firestore user profile exists for existing features
-      try {
-        await UserProfileService().createUserProfileFromDetails(
-          uid: userId,
-          email: email,
-          name: name,
-        );
-      } catch (_) {}
+      await UserProfileService().createUserProfileFromDetails(
+        uid: userId,
+        email: email,
+        name: name,
+        bloodType: bloodType,
+        phoneNumber: phoneNumber,
+        locationCity: locationCity,
+      );
     } catch (e) {
       debugPrint('Non-fatal: Error ensuring profile exists in Supabase: $e');
     }

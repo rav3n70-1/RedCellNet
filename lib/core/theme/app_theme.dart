@@ -1,5 +1,6 @@
 // lib/core/theme/app_theme.dart
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   // Brand & Surface Colors (Per Design Specification)
@@ -53,17 +54,29 @@ class AppColors {
   static const Color textSecondary = Color(0xFF64748B); // Slate Grey 500
   static const Color textMuted = Color(0xFF94A3B8); // Slate 400
 
-  // Dark Theme Neutrals & Surfaces
-  static const Color darkScaffoldBackground = Color(0xFF0F172A); // Slate 900
-  static const Color darkSurface = Color(0xFF1E293B); // Slate 800
-  static const Color darkSurfaceMuted = Color(0xFF334155); // Slate 700
-  static const Color darkBorder = Color(0xFF334155);
+  // Dark Theme Neutrals & Surfaces ("LifePulse" Obsidian Palette)
+  static const Color darkScaffoldBackground = Color(0xFF090D16); // Deep Obsidian Canvas
+  static const Color darkSurface = Color(0xFF121826); // Slate Surface 850
+  static const Color darkSurfaceMuted = Color(0xFF1E293B); // Slate 800
+  static const Color darkBorder = Color(0xFF243048); // Subtle border
+  static const Color darkBorderSubtle = Color(0x1FFFFFFF); // 12% Translucent White
   static const Color darkTextPrimary = Color(0xFFF8FAFC);
   static const Color darkTextSecondary = Color(0xFF94A3B8);
   static const Color darkTextMuted = Color(0xFF64748B);
   static const Color darkPrimaryContainer = Color(0xFF4C0519); // Rose 950
 
-  // Controlled Gradients (Burgundy & Emergency)
+  // LifePulse Brand Tokens
+  static const Color obsidianCanvas = Color(0xFF090D16);
+  static const Color obsidianSurface = Color(0xFF121826);
+  static const Color lifePulseCrimson = Color(0xFFE11D48);
+  static const Color vitalEmerald = Color(0xFF059669);
+  static const Color vitalEmeraldLight = Color(0xFFECFDF5);
+  static const Color imperialGold = Color(0xFFF59E0B);
+  static const Color imperialGoldLight = Color(0xFFFFFBEB);
+  static const Color cyberCyan = Color(0xFF06B6D4);
+  static const Color cyberCyanLight = Color(0xFFECFEFF);
+
+  // Controlled Gradients (Burgundy & Emergency & Glass)
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [Color(0xFFA41235), Color(0xFF7A0D27)],
     begin: Alignment.topLeft,
@@ -73,6 +86,12 @@ class AppColors {
 
   static const LinearGradient emergencyGradient = LinearGradient(
     colors: [Color(0xFFE11D48), Color(0xFFA41235)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient vitalGradient = LinearGradient(
+    colors: [Color(0xFF059669), Color(0xFF0D9488)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -89,7 +108,21 @@ class AppColors {
     end: Alignment.bottomRight,
   );
 
-  // Soft shadows
+  static LinearGradient glassGradient(BuildContext context) => LinearGradient(
+        colors: isDark(context)
+            ? [
+                const Color(0xFF1E293B).withValues(alpha: 0.65),
+                const Color(0xFF0F172A).withValues(alpha: 0.45)
+              ]
+            : [
+                Colors.white.withValues(alpha: 0.90),
+                Colors.white.withValues(alpha: 0.70)
+              ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+
+  // Soft shadows & LifePulse Neon Glows
   static List<BoxShadow> get softShadow => [
         BoxShadow(
           color: const Color(0xFF0F172A).withValues(alpha: 0.04),
@@ -121,11 +154,102 @@ class AppColors {
           offset: const Offset(0, 5),
         ),
       ];
+
+  static List<BoxShadow> get glowVital => [
+        BoxShadow(
+          color: vitalEmerald.withValues(alpha: 0.30),
+          blurRadius: 16,
+          offset: const Offset(0, 4),
+        ),
+      ];
+
+  static List<BoxShadow> get glowGold => [
+        BoxShadow(
+          color: imperialGold.withValues(alpha: 0.30),
+          blurRadius: 16,
+          offset: const Offset(0, 4),
+        ),
+      ];
+
+  // Dynamic Theme Helpers (Seamless Light & Dark Mode)
+  static bool isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
+
+  static Color cardBg(BuildContext context) =>
+      isDark(context) ? darkSurface : Colors.white;
+
+  static Border glassBorder(BuildContext context, {double width = 1.0}) =>
+      Border.all(
+        color: isDark(context)
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.06),
+        width: width,
+      );
+
+  static Color surfaceOf(BuildContext context) =>
+      isDark(context) ? darkSurface : surface;
+
+  static Color scaffoldOf(BuildContext context) =>
+      isDark(context) ? darkScaffoldBackground : scaffoldBackground;
+
+  static Color mutedOf(BuildContext context) =>
+      isDark(context) ? darkSurfaceMuted : surfaceMuted;
+
+  static Color surfaceMutedOf(BuildContext context) =>
+      isDark(context) ? darkSurfaceMuted : surfaceMuted;
+
+  static Color borderOf(BuildContext context) =>
+      isDark(context) ? darkBorder : border;
+
+  static BorderSide borderSideOf(BuildContext context, {double width = 1.0}) =>
+      BorderSide(color: borderOf(context), width: width);
+
+  static Color textPrimaryOf(BuildContext context) =>
+      isDark(context) ? darkTextPrimary : textPrimary;
+
+  static Color textSecondaryOf(BuildContext context) =>
+      isDark(context) ? darkTextSecondary : textSecondary;
+
+  static Color textMutedOf(BuildContext context) =>
+      isDark(context) ? darkTextMuted : textMuted;
 }
 
 class AppTheme {
+  static bool get _isFlutterTest {
+    try {
+      return WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static TextTheme _buildTextTheme(TextTheme base, Color primaryColor) {
+    const fallback = ['Noto Sans Bengali', 'sans-serif'];
+    if (_isFlutterTest) {
+      return base.apply(
+        bodyColor: primaryColor,
+        displayColor: primaryColor,
+        fontFamilyFallback: fallback,
+      );
+    }
+    try {
+      return GoogleFonts.interTextTheme(base).apply(
+        bodyColor: primaryColor,
+        displayColor: primaryColor,
+        fontFamilyFallback: fallback,
+      );
+    } catch (_) {
+      return base.apply(
+        bodyColor: primaryColor,
+        displayColor: primaryColor,
+        fontFamilyFallback: fallback,
+      );
+    }
+  }
+
   // --- Light Theme ---
   static ThemeData get lightTheme {
+    final base = ThemeData(useMaterial3: true, brightness: Brightness.light);
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -142,7 +266,8 @@ class AppTheme {
         onError: Colors.white,
       ),
       scaffoldBackgroundColor: AppColors.scaffoldBackground,
-      fontFamily: 'Inter',
+      textTheme: _buildTextTheme(base.textTheme, AppColors.textPrimary),
+      fontFamilyFallback: const ['Noto Sans Bengali', 'sans-serif'],
 
       appBarTheme: const AppBarTheme(
         elevation: 0,
@@ -269,11 +394,18 @@ class AppTheme {
         elevation: 6,
       ),
 
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
-        elevation: 3,
-        shape: CircleBorder(),
+        elevation: 4,
+        highlightElevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        extendedTextStyle: const TextStyle(
+          fontSize: 14.5,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          letterSpacing: 0.2,
+        ),
       ),
 
       dividerColor: AppColors.divider,
@@ -282,6 +414,7 @@ class AppTheme {
 
   // --- Dark Theme ---
   static ThemeData get darkTheme {
+    final base = ThemeData(useMaterial3: true, brightness: Brightness.dark);
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -298,7 +431,8 @@ class AppTheme {
         onError: Colors.white,
       ),
       scaffoldBackgroundColor: AppColors.darkScaffoldBackground,
-      fontFamily: 'Inter',
+      textTheme: _buildTextTheme(base.textTheme, AppColors.darkTextPrimary),
+      fontFamilyFallback: const ['Noto Sans Bengali', 'sans-serif'],
 
       appBarTheme: const AppBarTheme(
         elevation: 0,
@@ -402,6 +536,20 @@ class AppTheme {
         backgroundColor: AppColors.darkSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         elevation: 6,
+      ),
+
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: const Color(0xFFE11D48),
+        foregroundColor: Colors.white,
+        elevation: 4,
+        highlightElevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        extendedTextStyle: const TextStyle(
+          fontSize: 14.5,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          letterSpacing: 0.2,
+        ),
       ),
 
       dividerColor: AppColors.darkBorder,

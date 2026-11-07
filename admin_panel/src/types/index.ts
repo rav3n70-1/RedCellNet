@@ -6,29 +6,52 @@ export type UrgencyLevel = 'Critical' | 'High' | 'Medium' | 'Low';
 
 export type RequestStatus = 'Open' | 'Partially Fulfilled' | 'Fulfilled' | 'Cancelled' | 'Expired';
 
-export type VerificationStatus = 'pending' | 'verified' | 'rejected';
+export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
+
+export interface DonationHistoryEntry {
+  id?: string;
+  request_id?: string;
+  hospital?: string;
+  hospital_name?: string;
+  date?: string;
+  units?: number;
+  component_type?: string;
+  verified?: boolean;
+  certificate_id?: string;
+}
 
 export interface UserProfile {
   id: string;
   email: string;
   name: string;
   phone_number?: string;
-  blood_type?: BloodGroup;
+  is_phone_verified?: boolean;
+  blood_type?: BloodGroup | null;
   location_city?: string;
   location_area?: string;
+  avatar_url?: string;
   is_available_to_donate?: boolean;
+  availability_status?: string;
+  last_donation_date?: string | null;
+  next_eligible_date?: string | null;
   is_verified_donor?: boolean;
   verification_status?: VerificationStatus;
-  rejection_reason?: string;
-  verified_at?: string;
-  verification_lab?: string;
-  verification_cert?: string;
-  verification_notes?: string;
-  verification_requested_at?: string;
+  rejection_reason?: string | null;
+  verified_at?: string | null;
+  verification_lab?: string | null;
+  verification_cert?: string | null;
+  verification_notes?: string | null;
+  verification_doc_url?: string | null;
+  extracted_blood_type?: string | null;
+  verification_requested_at?: string | null;
   points?: number;
   total_donations?: number;
   badges?: string[];
+  donation_history?: DonationHistoryEntry[];
   role?: 'admin' | 'moderator' | 'user';
+  is_banned?: boolean;
+  ban_reason?: string | null;
+  staff_notes?: Array<Record<string, unknown>>;
   created_at?: string;
   updated_at?: string;
 }
@@ -38,11 +61,14 @@ export interface BloodOffer {
   donorId: string;
   donorName: string;
   donorBloodType: string;
+  donorPhone?: string;
   offeredUnits: number;
   donorIsVerified?: boolean;
-  status: 'pending' | 'accepted' | 'declined';
+  note?: string;
+  status: 'pending' | 'accepted' | 'declined' | 'completed' | 'withdrawn' | 'released';
   offerTimestamp: string;
   acceptedAt?: string;
+  completedAt?: string;
 }
 
 export interface TimelineEvent {
@@ -61,11 +87,15 @@ export interface BloodRequest {
   patient_identifier?: string;
   hospital_name: string;
   hospital_address?: string;
+  ward_bed_info?: string;
   city?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   required_blood_type: BloodGroup;
   required_units: number;
   accepted_units: number;
   remaining_units: number;
+  contact_person?: string;
   contact_phone: string;
   urgency_level: UrgencyLevel;
   reason?: string;
@@ -78,6 +108,8 @@ export interface BloodRequest {
   accepted_donor_ids?: string[];
   offers?: BloodOffer[];
   timeline?: TimelineEvent[];
+  is_verified_hospital_case?: boolean;
+  staff_notes?: Array<Record<string, unknown>>;
   created_at?: string;
   updated_at?: string;
 }
@@ -86,11 +118,18 @@ export interface DonationCenter {
   id: string;
   name: string;
   address: string;
-  latitude: number;
-  longitude: number;
+  city?: string;
+  latitude: number | null;
+  longitude: number | null;
   operating_hours?: string;
+  contact_info?: string;
   contact_number?: string;
+  facility_type?: string;
+  operational_status?: string;
+  is_verified?: boolean;
+  blood_inventory?: Record<string, number>;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface EducationalContent {
@@ -101,9 +140,13 @@ export interface EducationalContent {
   content_bn: string;
   category: string;
   order: number;
-  image_url?: string;
+  image_url?: string | null;
   points: number;
+  points_value?: number;
+  read_time_minutes?: number;
+  source_attribution?: string | null;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface NotificationItem {
@@ -126,8 +169,20 @@ export interface ReportItem {
   reason: string;
   details?: string;
   status: 'pending' | 'dismissed' | 'action_taken';
-  resolved_at?: string;
+  resolved_by?: string | null;
+  resolution_notes?: string | null;
+  resolved_at?: string | null;
   created_at?: string;
+}
+
+export interface AdminLog {
+  id: string;
+  admin_user_id: string | null;
+  action_type: string;
+  target_type: string;
+  target_id?: string | null;
+  details?: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export interface DashboardMetrics {
@@ -139,7 +194,21 @@ export interface DashboardMetrics {
   activeRequests: number;
   criticalRequests: number;
   fulfilledRequests: number;
+  expiredRequests: number;
   totalFacilities: number;
   pendingReports: number;
   bloodGroupCounts: Record<BloodGroup, number>;
+}
+
+export interface SystemBroadcast {
+  id: string;
+  title: string;
+  message: string;
+  broadcast_type: string;
+  target_blood_type?: string | null;
+  target_city?: string | null;
+  created_at: string;
+  is_active: boolean;
+  expires_at?: string | null;
+  updated_at?: string | null;
 }

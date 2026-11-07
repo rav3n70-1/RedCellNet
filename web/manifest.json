@@ -3,9 +3,9 @@
     "short_name": "RedCellNet",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FAF8F8",
+    "theme_color": "#A41235",
+    "description": "RedCellNet — Emergency Blood Donation & Hospital Fulfillment Network.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

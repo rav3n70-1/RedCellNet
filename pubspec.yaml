@@ -1,5 +1,5 @@
 name: red_cell_net_final
-description: "A new Flutter project."
+description: "RedCellNet — Emergency Blood Donation & Hospital Fulfillment Network."
 
 publish_to: 'none'
 
@@ -23,34 +23,42 @@ dependencies:
   image_picker: ^1.1.2
   google_sign_in: ^6.2.1
 
-  # Location & Permissions
+  # Location
   geolocator: ^12.0.0
-  permission_handler: ^11.3.1
   geocoding: ^3.0.0
 
-  # Maps
-  google_maps_flutter: ^2.12.1
+  # Maps & Navigation
   flutter_map: ^8.1.1
   latlong2: ^0.10.1
   url_launcher: ^6.3.0
-  google_maps_apis: ^1.1.1
-  foundation: ^0.0.5
-  google_places_sdk: ^1.2.1
   flutter_local_notifications: ^19.0.0
+
+  # Typography, Certificates, QR & Native Sharing
+  google_fonts: ^6.2.1
+  share_plus: ^10.1.4
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  qr_flutter: ^4.1.0
 
   # HTTP Client
   http: ^1.2.1
   http_parser: ^4.0.0
-  dio: ^5.0.0
 
-  # Default Icons
+  # Core UI & Persistence
   cupertino_icons: ^1.0.6
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.13.1
+
+# Pin image to 4.10.1 because image 4.11.0 mistakenly declares archive ^4.0.9
+# while calling ZLibDecoder.decodeLazy (added in archive 4.5.0), conflicting
+# with pdf 3.12.0's archive <4.1.0 constraint.
+dependency_overrides:
+  image: 4.10.1
 
 flutter:
   uses-material-design: true

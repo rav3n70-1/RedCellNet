@@ -105,15 +105,27 @@ class _LoginPageState extends State<LoginPage> {
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final isDark = AppColors.isDark(dialogCtx);
           return AlertDialog(
-            title: const Text('Reset Password'),
+            backgroundColor: AppColors.cardBg(dialogCtx),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: isDark ? AppColors.borderSideOf(dialogCtx) : BorderSide.none,
+            ),
+            title: Text(
+              'Reset Password',
+              style: TextStyle(
+                color: AppColors.textPrimaryOf(dialogCtx),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Enter your email address and we will send you a password reset link.',
-                  style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  style: TextStyle(fontSize: 14, color: AppColors.textSecondaryOf(dialogCtx)),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -208,14 +220,15 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final bool isBusy = _isLoading || _isGoogleLoading;
+    final isDark = AppColors.isDark(context);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.scaffoldOf(context),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding:
-                const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                const EdgeInsets.symmetric(horizontal: 24.0, vertical: 28.0),
             child: Form(
               key: _formKey,
               child: Column(
@@ -225,15 +238,17 @@ class _LoginPageState extends State<LoginPage> {
                   // --- Brand Hero ---
                   Center(
                     child: Container(
-                      width: 80,
-                      height: 80,
+                      width: 84,
+                      height: 84,
                       decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
+                        color: isDark
+                            ? const Color(0xFF4C0519)
+                            : AppColors.primaryLight,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.18),
-                            blurRadius: 16,
+                            color: AppColors.primary.withValues(alpha: 0.20),
+                            blurRadius: 18,
                             offset: const Offset(0, 6),
                           ),
                         ],
@@ -242,8 +257,11 @@ class _LoginPageState extends State<LoginPage> {
                       child: Image.asset(
                         'assets/icon/icon.png',
                         errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.water_drop_rounded,
-                                size: 44, color: AppColors.primary),
+                            const Icon(
+                          Icons.water_drop_rounded,
+                          size: 44,
+                          color: AppColors.primary,
+                        ),
                       ),
                     ),
                   ),
@@ -252,23 +270,23 @@ class _LoginPageState extends State<LoginPage> {
                     'RedCellNet',
                     style: TextStyle(
                       fontSize: 28,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w900,
                       color: AppColors.primary,
                       letterSpacing: -0.5,
                     ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Connecting Donors • Saving Lives',
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppColors.textSecondary,
+                      color: AppColors.textSecondaryOf(context),
                       fontWeight: FontWeight.w500,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 28),
 
                   // --- Error Message Banner ---
                   if (_errorMessage != null)
@@ -277,9 +295,11 @@ class _LoginPageState extends State<LoginPage> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14.0, vertical: 12.0),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFEE2E2),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                        color: AppColors.critical
+                            .withValues(alpha: isDark ? 0.18 : 0.10),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: AppColors.critical.withValues(alpha: 0.40)),
                       ),
                       child: Row(
                         children: [
@@ -289,8 +309,10 @@ class _LoginPageState extends State<LoginPage> {
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(
-                                color: AppColors.critical,
+                              style: TextStyle(
+                                color: isDark
+                                    ? const Color(0xFFFCA5A5)
+                                    : AppColors.critical,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13,
                               ),
@@ -376,7 +398,7 @@ class _LoginPageState extends State<LoginPage> {
                         'Forgot Password?',
                         style: TextStyle(
                           color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           fontSize: 13,
                         ),
                       ),
@@ -384,7 +406,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // --- Login Button ---
+                  // --- Sign In Button ---
                   SizedBox(
                     height: 52,
                     child: ElevatedButton(
@@ -393,9 +415,10 @@ class _LoginPageState extends State<LoginPage> {
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         elevation: 2,
-                        shadowColor: AppColors.primary.withValues(alpha: 0.4),
+                        shadowColor:
+                            AppColors.primary.withValues(alpha: 0.4),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                       child: _isLoading
@@ -420,24 +443,26 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 20),
 
                   // --- Divider ---
-                  const Row(
+                  Row(
                     children: [
                       Expanded(
-                        child: Divider(color: AppColors.border, thickness: 1),
+                        child: Divider(
+                            color: AppColors.borderOf(context), thickness: 1),
                       ),
                       Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Text(
                           'OR',
                           style: TextStyle(
-                            color: AppColors.textMuted,
+                            color: AppColors.textMutedOf(context),
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
                         ),
                       ),
                       Expanded(
-                        child: Divider(color: AppColors.border, thickness: 1),
+                        child: Divider(
+                            color: AppColors.borderOf(context), thickness: 1),
                       ),
                     ],
                   ),
@@ -449,12 +474,12 @@ class _LoginPageState extends State<LoginPage> {
                     child: OutlinedButton(
                       onPressed: isBusy ? null : _signInWithGoogle,
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textPrimary,
-                        backgroundColor: Colors.white,
-                        side: const BorderSide(
-                            color: AppColors.border, width: 1.2),
+                        foregroundColor: AppColors.textPrimaryOf(context),
+                        backgroundColor: AppColors.cardBg(context),
+                        side: BorderSide(
+                            color: AppColors.borderOf(context), width: 1.2),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                       child: _isGoogleLoading
@@ -472,16 +497,19 @@ class _LoginPageState extends State<LoginPage> {
                                 Image.asset(
                                   'assets/images/google_logo.png',
                                   height: 20.0,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      const Icon(Icons.g_mobiledata, size: 24),
+                                  errorBuilder:
+                                      (context, error, stackTrace) =>
+                                          const Icon(Icons.g_mobiledata,
+                                              size: 24),
                                 ),
                                 const SizedBox(width: 12),
-                                const Text(
+                                Text(
                                   'Sign in with Google',
                                   style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w600,
-                                    color: AppColors.textPrimary,
+                                    color:
+                                        AppColors.textPrimaryOf(context),
                                   ),
                                 ),
                               ],
@@ -499,7 +527,8 @@ class _LoginPageState extends State<LoginPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (context) => const RegisterPage()),
+                                    builder: (context) =>
+                                        const RegisterPage()),
                               );
                             },
                       borderRadius: BorderRadius.circular(8),
@@ -507,13 +536,13 @@ class _LoginPageState extends State<LoginPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                         child: RichText(
-                          text: const TextSpan(
+                          text: TextSpan(
                             text: "Don't have an account? ",
                             style: TextStyle(
-                              color: AppColors.textSecondary,
+                              color: AppColors.textSecondaryOf(context),
                               fontSize: 14,
                             ),
-                            children: [
+                            children: const [
                               TextSpan(
                                 text: 'Sign Up',
                                 style: TextStyle(

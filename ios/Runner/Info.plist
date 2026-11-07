@@ -50,13 +50,31 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
- 	<key>CADisableMinimumFrameDurationOnPhone</key>
- 	<true/>
-	 <key>NSPhotoLibraryUsageDescription</key>
-	 <string>RedCellNet needs access to your photo library to upload blood reports for profile completion.</string>
-	 <key>NSCameraUsageDescription</key>
-	 <string>RedCellNet needs access to your camera to take pictures of blood reports for profile completion.</string>
-	 <key>NSMicrophoneUsageDescription</key>
-	 <string>This app does not require microphone access, but it might be requested by the camera functions.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>RedCellNet needs access to your photo library to upload blood reports and profile avatars.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>RedCellNet needs access to your camera to scan laboratory blood reports for donor verification.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app does not require microphone access, but it might be requested by the camera functions.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>io.supabase.redcellnet</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tel</string>
+		<string>sms</string>
+		<string>mailto</string>
+		<string>https</string>
+		<string>comgooglemaps</string>
+		<string>whatsapp</string>
+	</array>
 </dict>
 </plist>

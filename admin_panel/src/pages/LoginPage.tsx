@@ -1,14 +1,12 @@
 // admin_panel/src/pages/LoginPage.tsx
 import React, { useState } from 'react';
-import { Activity, Lock, Mail, ArrowRight, KeyRound } from 'lucide-react';
+import { Activity, Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const LoginPage: React.FC = () => {
-  const { signIn, signUp } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(false);
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -18,38 +16,12 @@ export const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      if (isSignUp) {
-        if (!name.trim()) {
-          setErrorMsg('Please enter your full name.');
-          setIsLoading(false);
-          return;
-        }
-        const { error } = await signUp(email.trim(), password, name.trim());
-        if (error) throw error;
-      } else {
-        const { error } = await signIn(email.trim(), password);
-        if (error) throw error;
-      }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Authentication failed. Please check credentials.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Quick Demo Access for development and verification
-  const handleDemoLogin = async () => {
-    setIsLoading(true);
-    setErrorMsg('');
-    try {
-      const demoEmail = 'rohan.admin@redcellnet.com';
-      const demoPass = 'Rohan123@#';
-      const { error: signInErr } = await signIn(demoEmail, demoPass);
-      if (signInErr) {
-        setErrorMsg(signInErr.message);
-      }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Demo login failed');
+      const { error } = await signIn(email.trim(), password);
+      if (error) throw error;
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : 'Authentication failed. Please check credentials.';
+      setErrorMsg(msg);
     } finally {
       setIsLoading(false);
     }
@@ -68,7 +40,7 @@ export const LoginPage: React.FC = () => {
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">RedCellNet Portal</h2>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Emergency Blood Distribution & Operations Management
+            Emergency Blood Distribution & Staff Operations Console
           </p>
         </div>
 
@@ -79,26 +51,15 @@ export const LoginPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {isSignUp && (
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-              />
-            </div>
-          )}
-
           <div>
-            <label className="text-xs font-bold text-slate-700 block mb-1">Email Address</label>
+            <label className="text-xs font-bold text-slate-700 block mb-1">Staff Email Address</label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="email"
                 required
+                autoComplete="email"
+                placeholder="staff@redcellnet.org"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-red-500/20 focus:border-red-500 font-medium"
@@ -113,6 +74,8 @@ export const LoginPage: React.FC = () => {
               <input
                 type="password"
                 required
+                autoComplete="current-password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-red-500/20 focus:border-red-500 font-medium"
@@ -125,30 +88,17 @@ export const LoginPage: React.FC = () => {
             disabled={isLoading}
             className="w-full mt-2 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
           >
-            {isLoading ? 'Authenticating...' : isSignUp ? 'Create Admin Account' : 'Sign In to Operations'}
+            {isLoading ? 'Verifying Staff Credentials...' : 'Sign In to Staff Operations'}
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
 
-        <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            {isSignUp ? 'Already have an admin account? Sign In' : 'Need a new administrator account? Register'}
-          </button>
-
-          {/* Quick Demo Login Button */}
-          <button
-            type="button"
-            disabled={isLoading}
-            onClick={handleDemoLogin}
-            className="w-full py-2 px-3 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200"
-          >
-            <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-            Quick Demo Login (Instant Access)
-          </button>
+        <div className="mt-6 pt-5 border-t border-slate-100 flex items-start gap-2.5 text-left">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Authorized staff only. Moderator and Administrator roles are provisioned exclusively by
+            Super Administrators and enforced via Supabase Row Level Security.
+          </p>
         </div>
       </div>
 

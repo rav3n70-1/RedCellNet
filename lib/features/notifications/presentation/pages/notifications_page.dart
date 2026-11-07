@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:red_cell_net_final/core/models/supabase_snapshot.dart';
+import 'package:red_cell_net_final/core/routes/app_routes.dart';
+import 'package:red_cell_net_final/core/services/app_settings_service.dart';
 import 'package:red_cell_net_final/core/theme/app_theme.dart';
 import 'package:red_cell_net_final/core/widgets/common_widgets.dart';
 import 'package:red_cell_net_final/features/blood_requests/presentation/pages/request_details_page.dart';
@@ -17,12 +19,26 @@ class NotificationsPage extends StatefulWidget {
 class _NotificationsPageState extends State<NotificationsPage>
     with SingleTickerProviderStateMixin {
   final NotificationService _notificationService = NotificationService();
+  late final Stream<List<Map<String, dynamic>>> _notificationsStream;
   late TabController _tabController;
+
+  static const Set<String> _urgentAndOfferTypes = {
+    'emergency_request',
+    'emergency_broadcast',
+    'emergency',
+    'donor_offer',
+    'new_offer',
+    'offer_accepted',
+    'offer_declined',
+    'request_update',
+    'donation_completed',
+  };
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _notificationsStream = _notificationService.getUserNotificationsStream();
   }
 
   @override
@@ -44,7 +60,9 @@ class _NotificationsPageState extends State<NotificationsPage>
       date = DateTime.now();
     }
     final diff = DateTime.now().difference(date);
-    if (diff.inMinutes < 60) {
+    if (diff.inMinutes < 1) {
+      return 'Just now';
+    } else if (diff.inMinutes < 60) {
       return '${diff.inMinutes}m ago';
     } else if (diff.inHours < 24) {
       return '${diff.inHours}h ago';
@@ -57,12 +75,21 @@ class _NotificationsPageState extends State<NotificationsPage>
 
   IconData _getIconForType(String? type) {
     switch (type) {
+      case 'donor_offer':
       case 'new_offer':
         return Icons.volunteer_activism_rounded;
       case 'offer_accepted':
+      case 'donation_completed':
         return Icons.check_circle_rounded;
+      case 'offer_declined':
+      case 'request_update':
+        return Icons.sync_alt_rounded;
+      case 'emergency_request':
+      case 'emergency_broadcast':
       case 'emergency':
         return Icons.emergency_rounded;
+      case 'verification':
+        return Icons.verified_user_rounded;
       default:
         return Icons.notifications_active_rounded;
     }
@@ -70,10 +97,18 @@ class _NotificationsPageState extends State<NotificationsPage>
 
   Color _getColorForType(String? type) {
     switch (type) {
+      case 'donor_offer':
       case 'new_offer':
         return AppColors.secondary;
       case 'offer_accepted':
+      case 'donation_completed':
+      case 'verification':
         return AppColors.success;
+      case 'offer_declined':
+      case 'request_update':
+        return AppColors.warning;
+      case 'emergency_request':
+      case 'emergency_broadcast':
       case 'emergency':
         return AppColors.emergency;
       default:
@@ -81,17 +116,81 @@ class _NotificationsPageState extends State<NotificationsPage>
     }
   }
 
+  void _navigateFromNotification(Map<String, dynamic> data) {
+    final String screen = (data['screen'] ?? '').toString().trim();
+    final String type = (data['type'] ?? '').toString().trim();
+    final String? relatedId =
+        (data['relatedId'] ?? data['resource_id'] ?? data['resourceId'])
+            ?.toString();
+
+    if (screen == '/request-details' ||
+        screen == '/request_details' ||
+        const {
+          'emergency_request',
+          'donor_offer',
+          'new_offer',
+          'offer_accepted',
+          'offer_declined',
+          'request_update',
+        }.contains(type)) {
+      if (relatedId != null && relatedId.isNotEmpty) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RequestDetailsPage(requestId: relatedId),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (screen == '/profile' ||
+        type == 'verification' ||
+        type == 'donation_completed' ||
+        type == 'role_update') {
+      Navigator.pushNamed(context, AppRoutes.profile);
+      return;
+    }
+
+    if (screen == '/home' || type == 'emergency_broadcast') {
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      } else {
+        Navigator.pushNamed(context, AppRoutes.home);
+      }
+      return;
+    }
+
+    if (screen == '/map') {
+      Navigator.pushNamed(context, AppRoutes.map);
+      return;
+    }
+
+    if (screen == '/learn') {
+      Navigator.pushNamed(context, AppRoutes.contentList);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final settings = AppSettingsService();
+
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: AppColors.scaffoldOf(context),
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text(settings.tr('Notifications')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.tune_rounded),
+            tooltip: settings.tr('Notification Preferences'),
+            onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.profile);
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.done_all_rounded),
             tooltip: 'Mark All as Read',
@@ -109,17 +208,18 @@ class _NotificationsPageState extends State<NotificationsPage>
         ],
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'All'),
-            Tab(text: 'Offers & Emergencies'),
-            Tab(text: 'System'),
+          tabs: [
+            Tab(text: settings.tr('All')),
+            const Tab(text: 'Requests & Offers'),
+            const Tab(text: 'System & Account'),
           ],
         ),
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _notificationService.getUserNotificationsStream(),
+        stream: _notificationsStream,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -138,14 +238,14 @@ class _NotificationsPageState extends State<NotificationsPage>
             controller: _tabController,
             children: [
               _buildList(allDocs),
-              _buildList(allDocs.where((d) {
-                final type = d['type'] ?? '';
-                return type == 'new_offer' || type == 'offer_accepted' || type == 'emergency';
-              }).toList()),
-              _buildList(allDocs.where((d) {
-                final type = d['type'] ?? '';
-                return type != 'new_offer' && type != 'offer_accepted' && type != 'emergency';
-              }).toList()),
+              _buildList(allDocs
+                  .where((d) =>
+                      _urgentAndOfferTypes.contains((d['type'] ?? '').toString()))
+                  .toList()),
+              _buildList(allDocs
+                  .where((d) =>
+                      !_urgentAndOfferTypes.contains((d['type'] ?? '').toString()))
+                  .toList()),
             ],
           );
         },
@@ -158,9 +258,11 @@ class _NotificationsPageState extends State<NotificationsPage>
       return const EmptyStateView(
         icon: Icons.notifications_none_rounded,
         title: 'No Notifications',
-        message: 'You have no updates or notifications at the moment.',
+        message: 'You have no updates in this category right now.',
       );
     }
+
+    final isDark = AppColors.isDark(context);
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -168,10 +270,9 @@ class _NotificationsPageState extends State<NotificationsPage>
       itemBuilder: (context, index) {
         final data = docs[index];
         final String docId = data['id']?.toString() ?? '';
-        final String title = data['title'] ?? 'Notification';
-        final String body = data['body'] ?? '';
-        final String? type = data['type'];
-        final String? relatedId = data['relatedId'] ?? data['resource_id'] ?? data['resourceId'];
+        final String title = (data['title'] ?? 'Notification').toString();
+        final String body = (data['body'] ?? '').toString();
+        final String? type = data['type']?.toString();
         final bool isRead = data['isRead'] == true || data['is_read'] == true;
         final createdAt = data['createdAt'] ?? data['created_at'];
         final timeStr = _formatTime(createdAt);
@@ -182,13 +283,19 @@ class _NotificationsPageState extends State<NotificationsPage>
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: isRead ? Colors.white : AppColors.primaryContainer.withValues(alpha: 0.6),
+            color: isRead
+                ? AppColors.cardBg(context)
+                : (isDark
+                    ? AppColors.primary.withValues(alpha: 0.22)
+                    : AppColors.primaryContainer.withValues(alpha: 0.6)),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isRead ? AppColors.border : AppColors.primary.withValues(alpha: 0.3),
+              color: isRead
+                  ? AppColors.borderOf(context)
+                  : AppColors.primary.withValues(alpha: 0.4),
               width: isRead ? 1 : 1.5,
             ),
-            boxShadow: AppColors.cardShadow,
+            boxShadow: isDark ? null : AppColors.cardShadow,
           ),
           child: Material(
             color: Colors.transparent,
@@ -198,13 +305,8 @@ class _NotificationsPageState extends State<NotificationsPage>
                 if (!isRead && docId.isNotEmpty) {
                   await _notificationService.markAsRead(docId);
                 }
-                if (relatedId != null && relatedId.isNotEmpty && context.mounted) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => RequestDetailsPage(requestId: relatedId),
-                    ),
-                  );
+                if (mounted) {
+                  _navigateFromNotification(data);
                 }
               },
               child: Padding(
@@ -215,7 +317,7 @@ class _NotificationsPageState extends State<NotificationsPage>
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
+                        color: color.withValues(alpha: 0.14),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(icon, color: color, size: 20),
@@ -233,16 +335,19 @@ class _NotificationsPageState extends State<NotificationsPage>
                                   title,
                                   style: TextStyle(
                                     fontSize: 14,
-                                    fontWeight: isRead ? FontWeight.w700 : FontWeight.w900,
-                                    color: AppColors.textPrimary,
+                                    fontWeight: isRead
+                                        ? FontWeight.w700
+                                        : FontWeight.w900,
+                                    color: AppColors.textPrimaryOf(context),
                                   ),
                                 ),
                               ),
+                              const SizedBox(width: 8),
                               Text(
                                 timeStr,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: AppColors.textMuted,
+                                  color: AppColors.textMutedOf(context),
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -253,7 +358,9 @@ class _NotificationsPageState extends State<NotificationsPage>
                             body,
                             style: TextStyle(
                               fontSize: 12,
-                              color: isRead ? AppColors.textSecondary : AppColors.textPrimary,
+                              color: isRead
+                                  ? AppColors.textSecondaryOf(context)
+                                  : AppColors.textPrimaryOf(context),
                               height: 1.35,
                             ),
                           ),
