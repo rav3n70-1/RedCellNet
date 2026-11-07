@@ -25,6 +25,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   String? get _currentUserId => SupabaseAuthService().currentUserId;
 
   late TextEditingController _nameController;
+  late TextEditingController _nicknameController;
   late TextEditingController _phoneController;
   late TextEditingController _cityController;
 
@@ -49,6 +50,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   void initState() {
     super.initState();
     _nameController = TextEditingController();
+    _nicknameController = TextEditingController();
     _phoneController = TextEditingController();
     _cityController = TextEditingController();
     _loadUserData();
@@ -57,6 +59,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   @override
   void dispose() {
     _nameController.dispose();
+    _nicknameController.dispose();
     _phoneController.dispose();
     _cityController.dispose();
     super.dispose();
@@ -76,6 +79,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       final userData = userDoc.data();
       if (userData != null) {
         _nameController.text = (userData['name'] ?? '').toString();
+        _nicknameController.text = (userData['nickname'] ?? '').toString();
         _phoneController.text = (userData['phoneNumber'] ?? '').toString();
         _cityController.text = (userData['locationCity'] ?? '').toString();
         _avatarUrl = userData['avatarUrl']?.toString();
@@ -303,6 +307,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     setState(() => _isSaving = true);
     final String newName = _nameController.text.trim();
+    final String newNickname = _nicknameController.text.trim();
     final String newBloodType = _selectedBloodType!;
     final String newCity = _cityController.text.trim();
     final String newPhone = _phoneController.text.trim();
@@ -337,6 +342,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     final Map<String, dynamic> updatedData = {
       'name': newName,
+      'nickname': newNickname,
       'phoneNumber': newPhone,
       'locationCity': newCity,
       'bloodType': newBloodType,
@@ -960,6 +966,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             validator: (v) => v == null || v.trim().isEmpty
                                 ? 'Please enter your name'
                                 : null,
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _nicknameController,
+                            enabled: enableForm,
+                            style: TextStyle(
+                                color: AppColors.textPrimaryOf(context)),
+                            decoration: const InputDecoration(
+                              labelText: 'Nickname / Last Name (Greeting Name)',
+                              hintText: 'Shown below greetings on Home & Pass Card',
+                              prefixIcon: Icon(Icons.badge_outlined),
+                            ),
                           ),
                           const SizedBox(height: 14),
                           TextFormField(

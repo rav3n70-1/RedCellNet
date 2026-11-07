@@ -87,9 +87,8 @@ flutter {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation("androidx.multidex:multidex:2.0.1")
+    implementation("androidx.biometric:biometric:1.1.0")
 
     // FIX: Update desugaring library version
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4") // Use required version
-
-    // TODO: MERGE any other dependencies
 }

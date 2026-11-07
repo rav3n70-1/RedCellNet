@@ -208,18 +208,19 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   }
 
   String _getTileUrl(BuildContext context) {
+    return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  }
+
+  bool _shouldUseDarkMapFilter(BuildContext context) {
     final isDark = AppColors.isDark(context);
     switch (_tileStyle) {
       case MapTileStyle.darkMatter:
-        return 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png';
+        return true;
       case MapTileStyle.cleanVoyager:
-        return 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
       case MapTileStyle.openStreetMap:
-        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        return false;
       case MapTileStyle.auto:
-        return isDark
-            ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
-            : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+        return isDark;
     }
   }
 
@@ -628,11 +629,26 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         },
       ),
       children: [
-        TileLayer(
-          urlTemplate: _getTileUrl(context),
-          userAgentPackageName: 'com.example.red_cell_net',
-          maxZoom: 19,
-        ),
+        if (_shouldUseDarkMapFilter(context))
+          ColorFiltered(
+            colorFilter: const ColorFilter.matrix(<double>[
+              -0.82, 0, 0, 0, 215,
+              0, -0.82, 0, 0, 222,
+              0, 0, -0.75, 0, 235,
+              0, 0, 0, 1, 0,
+            ]),
+            child: TileLayer(
+              urlTemplate: _getTileUrl(context),
+              userAgentPackageName: 'org.redcellnet.lifepulse',
+              maxZoom: 19,
+            ),
+          )
+        else
+          TileLayer(
+            urlTemplate: _getTileUrl(context),
+            userAgentPackageName: 'org.redcellnet.lifepulse',
+            maxZoom: 19,
+          ),
         if (zoneCircles.isNotEmpty) CircleLayer(circles: zoneCircles),
         if (zoneBadgeMarkers.isNotEmpty) MarkerLayer(markers: zoneBadgeMarkers),
         MarkerLayer(
@@ -668,10 +684,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               ),
             ...markers,
           ],
-        ),
-        const SimpleAttributionWidget(
-          source: Text('© OpenStreetMap & CARTO'),
-          alignment: Alignment.bottomLeft,
         ),
       ],
     );

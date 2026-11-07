@@ -92,7 +92,7 @@ export const VerificationBadge: React.FC<{
             clipRule="evenodd"
           />
         </svg>
-        Verified Donor
+        Verified by RedCellNet
       </span>
     );
   }
@@ -118,7 +118,7 @@ export const VerificationBadge: React.FC<{
         }`}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 animate-pulse"></span>
-        Pending Review
+        Verification Pending
       </span>
     );
   }
@@ -130,7 +130,7 @@ export const VerificationBadge: React.FC<{
       }`}
     >
       <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mr-1.5"></span>
-      Unverified
+      Verification Pending
     </span>
   );
 };

@@ -24,6 +24,7 @@ export interface UserProfile {
   id: string;
   email: string;
   name: string;
+  nickname?: string | null;
   phone_number?: string;
   is_phone_verified?: boolean;
   blood_type?: BloodGroup | null;
@@ -44,6 +45,11 @@ export interface UserProfile {
   verification_doc_url?: string | null;
   extracted_blood_type?: string | null;
   verification_requested_at?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  medical_notes?: string | null;
+  referral_code?: string | null;
+  referral_count?: number;
   points?: number;
   total_donations?: number;
   badges?: string[];
@@ -51,6 +57,10 @@ export interface UserProfile {
   role?: 'admin' | 'moderator' | 'user';
   is_banned?: boolean;
   ban_reason?: string | null;
+  deletion_requested?: boolean;
+  deletion_requested_at?: string | null;
+  deletion_request_reason?: string | null;
+  deletion_request_status?: 'none' | 'pending' | 'approved' | 'rejected' | 'archived' | string | null;
   staff_notes?: Array<Record<string, unknown>>;
   created_at?: string;
   updated_at?: string;
@@ -69,6 +79,14 @@ export interface BloodOffer {
   offerTimestamp: string;
   acceptedAt?: string;
   completedAt?: string;
+  locationTrackingStatus?: 'none' | 'requested' | 'active' | 'declined' | 'stopped' | string;
+  locationTrackingRequestedAt?: string | null;
+  locationTrackingAcceptedAt?: string | null;
+  donorLatitude?: number | null;
+  donorLongitude?: number | null;
+  donorLocationUpdatedAt?: string | null;
+  donorEtaMinutes?: number | null;
+  donorDistanceKm?: number | null;
 }
 
 export interface TimelineEvent {

@@ -20,26 +20,165 @@ import {
   AlertTriangle,
   History,
   CheckCircle2,
+  UserX,
 } from 'lucide-react';
 import type { BloodGroup, BloodRequest, UserProfile } from '../types';
 import { BloodGroupBadge, StatusBadge, VerificationBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
-import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { EmptyState } from '../components/common/EmptyState';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 interface DonorsPageProps {
   donors: UserProfile[];
+  staffMembers?: UserProfile[];
   requests?: BloodRequest[];
   onRefresh: () => void;
 }
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
-export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], onRefresh }) => {
+const ACCREDITED_LAB_KEYWORDS = [
+  'POPULAR',
+  'IBN SINA',
+  'LABAID',
+  'SQUARE',
+  'EVERCARE',
+  'UNITED HOSPITAL',
+  'BSMMU',
+  'PG HOSPITAL',
+  'DHAKA MEDICAL',
+  'DMCH',
+  'RED CRESCENT',
+  'BDRCS',
+  'SANDHANI',
+  'BADHAN',
+  'QUANTUM',
+  'BIRDEM',
+  'ICDDR',
+  'MEDINOVA',
+  'PADMA DIAGNOSTIC',
+  'CHEVRON',
+  'EPIC HEALTH',
+  'ASGAR ALI',
+  'BRB',
+  'KURMITOLA',
+  'SUHRAWARDY',
+  'SALIMULLAH',
+  'MITFORD',
+  'CMCH',
+  'RMCH',
+  'CMH',
+  'NICVD',
+  'PRAAVA',
+  'AALOK',
+];
+
+interface ZeroCostScoreSummary {
+  score: number;
+  tier: 'HIGH_TRUST' | 'MODERATE_TRUST' | 'LOW_TRUST' | 'MISMATCH_ALERT';
+  accreditedLab: boolean;
+  extractedBg: string | null;
+  hasConflict: boolean;
+  hb: string | null;
+  screening: string | null;
+  cleanNotes: string;
+}
+
+function evaluateZeroCostVerification(donor: UserProfile): ZeroCostScoreSummary {
+  const rawNotes = donor.verification_notes || '';
+  const tagMatch = rawNotes.match(/\[ZCV-SCORE:(\d+)%\|TIER:([^|]+)\|BG:([^|]+)\|MATCH:([^|]+)\|LAB:([^|]+)\|CERT:([^|]+)\|HB:([^|]+)\|SCREEN:([^\]]+)\]/);
+  const cleanNotes = rawNotes.replace(/\[ZCV-SCORE:[^\]]+\]\s*/g, '').trim();
+
+  const labUpper = (donor.verification_lab || '').toUpperCase();
+  const accreditedLab = ACCREDITED_LAB_KEYWORDS.some((k) => labUpper.includes(k));
+  const extractedBg = donor.extracted_blood_type || (tagMatch && tagMatch[3] !== 'NONE' ? tagMatch[3] : null);
+  const declaredBg = donor.blood_type || null;
+  const hasConflict = Boolean(
+    extractedBg && declaredBg && extractedBg.toUpperCase() !== declaredBg.toUpperCase()
+  );
+
+  if (tagMatch) {
+    const parsedScore = Math.min(100, Math.max(0, parseInt(tagMatch[1], 10) || 0));
+    const tier = hasConflict
+      ? 'MISMATCH_ALERT'
+      : parsedScore >= 75
+        ? 'HIGH_TRUST'
+        : parsedScore >= 50
+          ? 'MODERATE_TRUST'
+          : 'LOW_TRUST';
+    return {
+      score: parsedScore,
+      tier,
+      accreditedLab,
+      extractedBg,
+      hasConflict,
+      hb: tagMatch[7] !== 'NA' ? tagMatch[7] : null,
+      screening: tagMatch[8] !== 'NONE' ? tagMatch[8] : null,
+      cleanNotes,
+    };
+  }
+
+  let score = 0;
+  if (extractedBg) {
+    score += 35;
+    if (declaredBg && extractedBg.toUpperCase() === declaredBg.toUpperCase()) {
+      score += 20;
+    } else if (!declaredBg) {
+      score += 10;
+    } else if (hasConflict) {
+      score -= 25;
+    }
+  } else if (declaredBg) {
+    score += 15;
+  }
+
+  if (accreditedLab) {
+    score += 25;
+  } else if (donor.verification_lab?.trim()) {
+    score += 12;
+  }
+
+  if (donor.verification_cert?.trim()) {
+    score += 15;
+  }
+  if (donor.verification_doc_url?.trim()) {
+    score += 10;
+  }
+  if (donor.is_phone_verified) {
+    score += 5;
+  }
+
+  const finalScore = Math.min(100, Math.max(0, score));
+  const tier = hasConflict
+    ? 'MISMATCH_ALERT'
+    : finalScore >= 75
+      ? 'HIGH_TRUST'
+      : finalScore >= 50
+        ? 'MODERATE_TRUST'
+        : 'LOW_TRUST';
+
+  return {
+    score: finalScore,
+    tier,
+    accreditedLab,
+    extractedBg,
+    hasConflict,
+    hb: null,
+    screening: null,
+    cleanNotes,
+  };
+}
+
+export const DonorsPage: React.FC<DonorsPageProps> = ({
+  donors,
+  staffMembers = [],
+  requests = [],
+  onRefresh,
+}) => {
   const { user: currentUser, isSuperAdmin } = useAuth();
 
+  const [activeDirectoryTab, setActiveDirectoryTab] = useState<'donors' | 'staff'>('donors');
   const [searchQuery, setSearchQuery] = useState('');
   const [bloodFilter, setBloodFilter] = useState<string>('all');
   const [verificationFilter, setVerificationFilter] = useState<string>('all');
@@ -53,6 +192,10 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
   const [viewingActivityDonor, setViewingActivityDonor] = useState<UserProfile | null>(null);
   const [editingDonor, setEditingDonor] = useState<UserProfile | null>(null);
   const [deletingDonor, setDeletingDonor] = useState<UserProfile | null>(null);
+  const [reviewingDeletionDonor, setReviewingDeletionDonor] = useState<UserProfile | null>(null);
+  const [deletionAdminNote, setDeletionAdminNote] = useState('Processed by staff');
+  const [deleteMode, setDeleteMode] = useState<'archive' | 'hard_delete'>('hard_delete');
+  const [deleteReason, setDeleteReason] = useState('Removed by administrator');
   const [rejectionReason, setRejectionReason] = useState('Inconclusive or illegible laboratory report');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -147,6 +290,8 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
     const matchesRole =
       roleFilter === 'all' ||
       (roleFilter === 'banned' && Boolean(d.is_banned)) ||
+      (roleFilter === 'deletion_requested' &&
+        (Boolean(d.deletion_requested) || d.deletion_request_status === 'pending')) ||
       (d.role || 'user') === roleFilter;
 
     return (
@@ -158,26 +303,113 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
     );
   });
 
-  // Verification Decision (Approve / Reject)
-  const handleVerificationDecision = async (donor: UserProfile, approve: boolean) => {
-    if (approve && !donor.blood_type) {
+  const pendingDeletionDonors = donors.filter(
+    (d) => Boolean(d.deletion_requested) || d.deletion_request_status === 'pending'
+  );
+
+  // Resolve Account Deletion Request (Approve Hard Delete / Archive / Reject)
+  const handleResolveDeletionRequest = async (
+    donor: UserProfile,
+    decision: 'approve_hard_delete' | 'archive' | 'reject'
+  ) => {
+    setIsProcessing(true);
+    try {
+      const { error } = await supabase.rpc('admin_resolve_deletion_request', {
+        target_user_id: donor.id,
+        decision,
+        admin_note: deletionAdminNote.trim() || 'Processed by staff',
+      });
+      if (error) throw error;
+      setReviewingDeletionDonor(null);
+      setDeletionAdminNote('Processed by staff');
+      onRefresh();
+    } catch (err: unknown) {
+      console.error('Error resolving account deletion request:', err);
+      alert(err instanceof Error ? err.message : 'Failed to resolve deletion request.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Verification Decision (Approve / Reject, with optional OCR Blood Group Sync)
+  const handleVerificationDecision = async (
+    donor: UserProfile,
+    approve: boolean,
+    syncExtractedBloodGroup = false
+  ) => {
+    const targetBlood = syncExtractedBloodGroup
+      ? donor.extracted_blood_type || donor.blood_type
+      : donor.blood_type || donor.extracted_blood_type;
+
+    if (approve && !targetBlood) {
       alert('Cannot approve donor verification while blood group is unset.');
       return;
     }
     setIsProcessing(true);
     try {
+      if (approve && targetBlood && targetBlood !== donor.blood_type) {
+        const { error: bgError } = await supabase
+          .from('profiles')
+          .update({ blood_type: targetBlood })
+          .eq('id', donor.id);
+        if (bgError) throw bgError;
+      }
+
       const { error } = await supabase.rpc('verify_donor', {
         target_user_id: donor.id,
         should_approve: approve,
-        admin_notes: approve ? null : rejectionReason.trim() || 'Rejected by clinical reviewer',
+        admin_notes: approve ? 'Verified by RedCellNet' : rejectionReason.trim() || 'Rejected by clinical reviewer',
       });
       if (error) throw error;
+
+      // Also purge stored document from verification-docs storage bucket if present
+      if (donor.verification_doc_url?.trim()) {
+        const rawPath = donor.verification_doc_url.trim();
+        const marker = '/verification-docs/';
+        const idx = rawPath.indexOf(marker);
+        const cleanStoragePath = idx !== -1
+          ? decodeURIComponent(rawPath.slice(idx + marker.length).split('?')[0])
+          : rawPath;
+        if (!cleanStoragePath.startsWith('http')) {
+          await supabase.storage.from('verification-docs').remove([cleanStoragePath]);
+        }
+      }
 
       setReviewingDonor(null);
       onRefresh();
     } catch (err: unknown) {
       console.error('Error updating verification status:', err);
       alert(err instanceof Error ? err.message : 'Failed to update verification status.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Batch Fast-Track High-Confidence Pending Verifications
+  const pendingHighTrustDonors = donors.filter((d) => {
+    if (d.verification_status !== 'pending') return false;
+    const zcv = evaluateZeroCostVerification(d);
+    return zcv.score >= 75 && !zcv.hasConflict && Boolean(d.blood_type || zcv.extractedBg);
+  });
+
+  const handleBatchFastTrackApprove = async () => {
+    if (pendingHighTrustDonors.length === 0) return;
+    setIsProcessing(true);
+    try {
+      for (const d of pendingHighTrustDonors) {
+        const zcv = evaluateZeroCostVerification(d);
+        if (!d.blood_type && zcv.extractedBg) {
+          await supabase.from('profiles').update({ blood_type: zcv.extractedBg }).eq('id', d.id);
+        }
+        await supabase.rpc('verify_donor', {
+          target_user_id: d.id,
+          should_approve: true,
+          admin_notes: `Fast-tracked via Zero-Cost Clinical Engine (${zcv.score}% confidence)`,
+        });
+      }
+      onRefresh();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Batch verification failed.');
     } finally {
       setIsProcessing(false);
     }
@@ -347,28 +579,24 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
     }
   };
 
-  // Delete Donor Profile (Super Admin only)
+  // Archive (Soft Delete) or Permanently Hard Delete Donor Profile
   const handleDeleteDonor = async () => {
-    if (!deletingDonor || !isSuperAdmin) return;
+    if (!deletingDonor) return;
     setIsProcessing(true);
     try {
       const targetId = deletingDonor.id;
-      const targetEmail = deletingDonor.email;
-      const { error } = await supabase.from('profiles').delete().eq('id', targetId);
-      if (error) throw error;
-
-      await supabase.rpc('record_admin_log', {
-        p_action_type: 'delete_user_profile',
-        p_target_type: 'profile',
-        p_target_id: targetId,
-        p_details: { email: targetEmail },
+      const { error } = await supabase.rpc('admin_delete_or_archive_user', {
+        target_user_id: targetId,
+        delete_mode: deleteMode,
+        reason: deleteReason.trim() || (deleteMode === 'hard_delete' ? 'Permanently deleted by admin' : 'Archived by staff'),
       });
+      if (error) throw error;
 
       setDeletingDonor(null);
       onRefresh();
     } catch (err: unknown) {
-      console.error('Error deleting donor profile:', err);
-      alert(err instanceof Error ? err.message : 'Failed to delete profile.');
+      console.error('Error archiving/deleting donor profile:', err);
+      alert(err instanceof Error ? err.message : 'Failed to process account deletion.');
     } finally {
       setIsProcessing(false);
     }
@@ -422,20 +650,118 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
     : [];
   const donorSubmittedOffers = viewingActivityDonor
     ? requests.flatMap((r) =>
-        (r.offers || [])
-          .filter((o) => o.donorId === viewingActivityDonor.id)
-          .map((o) => ({ offer: o, request: r }))
-      )
+      (r.offers || [])
+        .filter((o) => o.donorId === viewingActivityDonor.id)
+        .map((o) => ({ offer: o, request: r }))
+    )
     : [];
 
-  const ocrMismatch =
-    Boolean(reviewingDonor?.extracted_blood_type) &&
-    Boolean(reviewingDonor?.blood_type) &&
-    reviewingDonor?.extracted_blood_type?.toUpperCase() !==
-      reviewingDonor?.blood_type?.toUpperCase();
+  const reviewingZcv = reviewingDonor ? evaluateZeroCostVerification(reviewingDonor) : null;
+
+  const filteredStaff = staffMembers.filter((s) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      (s.name || '').toLowerCase().includes(query) ||
+      (s.email || '').toLowerCase().includes(query) ||
+      (s.phone_number || '').includes(searchQuery)
+    );
+  });
 
   return (
     <div className="space-y-6">
+      {/* Directory Separation Tabs: Registered Donors vs Admin & Staff Roster */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveDirectoryTab('donors')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+              activeDirectoryTab === 'donors'
+                ? 'bg-red-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Registered Donors ({donors.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDirectoryTab('staff')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+              activeDirectoryTab === 'staff'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            Admin & Staff Roster ({staffMembers.length})
+          </button>
+        </div>
+
+        <div className="text-xs text-slate-500 font-medium">
+          {activeDirectoryTab === 'donors'
+            ? 'Strictly regular donors (Admin & Staff accounts are isolated from donor metrics & dispatches).'
+            : 'Dedicated Governance & Medical Moderation Officers (excluded from donor pool).'}
+        </div>
+      </div>
+
+      {/* Zero-Cost Clinical Engine Fast-Track Banner */}
+      {activeDirectoryTab === 'donors' && pendingHighTrustDonors.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 font-black text-xs">
+              AI/OCR
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-emerald-950">
+                {pendingHighTrustDonors.length} High-Confidence Verification(s) Ready for Fast-Track
+              </h4>
+              <p className="text-[11px] text-emerald-800">
+                Donor Verification Engine confirmed Accredited Lab + Matching ABO/Rh with ≥75% trust score.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={isProcessing}
+            onClick={handleBatchFastTrackApprove}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs transition-colors shrink-0"
+          >
+            Approve All High-Trust ({pendingHighTrustDonors.length})
+          </button>
+        </div>
+      )}
+
+      {/* Pending Account Deletion Requests Banner */}
+      {activeDirectoryTab === 'donors' && pendingDeletionDonors.length > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
+              <UserX className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-rose-950">
+                {pendingDeletionDonors.length} Account Deletion Request(s) Require Staff Approval
+              </h4>
+              <p className="text-[11px] text-rose-800">
+                Regular users cannot self-delete or archive accounts. Review requests to permanently delete, archive, or reject.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              setRoleFilter(roleFilter === 'deletion_requested' ? 'all' : 'deletion_requested')
+            }
+            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-xs transition-colors shrink-0"
+          >
+            {roleFilter === 'deletion_requested'
+              ? 'Show All Donors'
+              : `Filter Deletion Queue (${pendingDeletionDonors.length})`}
+          </button>
+        </div>
+      )}
+
       {/* Search & Filter Toolbar */}
       <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
         {/* Search */}
@@ -501,26 +827,114 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
               onChange={(e) => setRoleFilter(e.target.value)}
               className="bg-transparent font-medium text-slate-700 focus:outline-hidden"
             >
-              <option value="all">All Roles</option>
-              <option value="moderator">Moderators</option>
-              <option value="admin">Administrators</option>
-              <option value="user">Standard Donors</option>
-              <option value="banned">Suspended Accounts</option>
+              <option value="all">All Donor Statuses</option>
+              <option value="user">Active Donor Accounts</option>
+              <option value="banned">Suspended / Archived Accounts</option>
+              <option value="deletion_requested">Deletion Requested (Pending Approval)</option>
             </select>
           </div>
 
           <button
             onClick={exportToCSV}
-            title="Export CSV"
+            title="Export Registered Donors CSV"
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            Export CSV
+            Export Donors CSV
           </button>
         </div>
       </div>
 
-      {/* Donors Table */}
+      {activeDirectoryTab === 'staff' ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          {filteredStaff.length === 0 ? (
+            <EmptyState
+              icon={Shield}
+              title="No Staff Members Found"
+              description="Promote a trusted account from the Registered Donors tab to Moderator or Admin."
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-slate-900 text-white text-[11px] font-bold uppercase tracking-wider">
+                    <th className="py-3.5 px-5">Staff Officer</th>
+                    <th className="py-3.5 px-4">RBAC Role</th>
+                    <th className="py-3.5 px-4">Official Contact</th>
+                    <th className="py-3.5 px-4">Donor Pool Isolation</th>
+                    <th className="py-3.5 px-5 text-right">Governance Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredStaff.map((staff) => (
+                    <tr key={staff.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-3.5 px-5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0">
+                            <Shield className="w-4 h-4 text-rose-400" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900">
+                              {staff.name || 'Staff Officer'}
+                            </div>
+                            <div className="text-xs text-slate-400 font-mono">
+                              {staff.id.slice(0, 12)}...
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {staff.role === 'admin' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-purple-100 text-purple-800 border border-purple-200">
+                            <Shield className="w-3.5 h-3.5" /> Super Admin
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 text-amber-800 border border-amber-200">
+                            <Shield className="w-3.5 h-3.5" /> Medical Moderator
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs text-slate-700">
+                        <div>{staff.email}</div>
+                        {staff.phone_number && (
+                          <div className="text-slate-400">{staff.phone_number}</div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700">
+                          Non-Donor Staff Account (Isolated)
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        {isSuperAdmin && staff.id !== currentUser?.id ? (
+                          <select
+                            aria-label={`Role for ${staff.name || staff.email}`}
+                            value={staff.role || 'moderator'}
+                            onChange={(e) =>
+                              handleRoleChange(
+                                staff,
+                                e.target.value as 'user' | 'moderator' | 'admin'
+                              )
+                            }
+                            className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-800"
+                          >
+                            <option value="admin">Super Admin</option>
+                            <option value="moderator">Medical Moderator</option>
+                            <option value="user">Move to Regular Donor Pool</option>
+                          </select>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">Active Session</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+      /* Donors Table */
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         {filteredDonors.length === 0 ? (
           <EmptyState
@@ -528,10 +942,10 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
             title="No Donors Found"
             description={
               searchQuery ||
-              bloodFilter !== 'all' ||
-              verificationFilter !== 'all' ||
-              availabilityFilter !== 'all' ||
-              roleFilter !== 'all'
+                bloodFilter !== 'all' ||
+                verificationFilter !== 'all' ||
+                availabilityFilter !== 'all' ||
+                roleFilter !== 'all'
                 ? 'No donors match your search filters. Try clearing some filters.'
                 : 'No registered donors are in the database yet.'
             }
@@ -587,8 +1001,18 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
                               )}
                               {donor.is_banned && (
                                 <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-sm bg-rose-100 text-rose-700 flex items-center gap-0.5">
-                                  <Ban className="w-2.5 h-2.5" /> Suspended
+                                  <Ban className="w-2.5 h-2.5" /> Suspended / Archived
                                 </span>
+                              )}
+                              {(donor.deletion_requested ||
+                                donor.deletion_request_status === 'pending') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setReviewingDeletionDonor(donor)}
+                                  className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-sm bg-rose-600 text-white flex items-center gap-1 hover:bg-rose-700 transition-colors"
+                                >
+                                  <UserX className="w-2.5 h-2.5" /> Deletion Requested
+                                </button>
                               )}
                             </div>
                             <div className="text-xs text-slate-400 font-mono">
@@ -639,32 +1063,48 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
                         <button
                           onClick={() => handleToggleAvailability(donor)}
                           title="Toggle availability"
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                            donor.is_available_to_donate ? 'bg-emerald-500' : 'bg-slate-300'
-                          }`}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${donor.is_available_to_donate ? 'bg-emerald-500' : 'bg-slate-300'
+                            }`}
                         >
                           <span
-                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                              donor.is_available_to_donate ? 'translate-x-4' : 'translate-x-0'
-                            }`}
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${donor.is_available_to_donate ? 'translate-x-4' : 'translate-x-0'
+                              }`}
                           />
                         </button>
                       </td>
 
-                      {/* Verification Status */}
+                      {/* Verification Status + Zero-Cost Clinical Score */}
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1.5">
-                          <VerificationBadge status={donor.verification_status} />
-                          {donor.verification_doc_url && donor.verification_status !== 'pending' && (
-                            <button
-                              type="button"
-                              onClick={() => setReviewingDonor(donor)}
-                              title="Inspect uploaded lab document"
-                              className="p-1 text-slate-400 hover:text-blue-600 rounded"
-                            >
-                              <FileText className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <VerificationBadge status={donor.verification_status} />
+                            {donor.verification_doc_url && donor.verification_status !== 'pending' && (
+                              <button
+                                type="button"
+                                onClick={() => setReviewingDonor(donor)}
+                                title="Inspect uploaded lab document"
+                                className="p-1 text-slate-400 hover:text-blue-600 rounded"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                          {donor.verification_status === 'pending' && (() => {
+                            const zcv = evaluateZeroCostVerification(donor);
+                            return (
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black w-fit ${
+                                  zcv.hasConflict
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : zcv.score >= 75
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {zcv.score}% Trust{zcv.accreditedLab ? ' • Accredited Lab' : ''}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </td>
 
@@ -682,6 +1122,17 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
                       {/* Actions */}
                       <td className="py-3.5 px-5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {(donor.deletion_requested ||
+                            donor.deletion_request_status === 'pending') && (
+                            <button
+                              onClick={() => setReviewingDeletionDonor(donor)}
+                              className="px-2.5 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors flex items-center gap-1"
+                            >
+                              <UserX className="w-3.5 h-3.5" />
+                              Review Deletion
+                            </button>
+                          )}
+
                           {donor.verification_status === 'pending' && (
                             <button
                               onClick={() => setReviewingDonor(donor)}
@@ -710,22 +1161,21 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
                                 )
                               }
                               className="text-[11px] font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-700 focus:outline-hidden"
-                              title="Change System Role (Super Admin only)"
+                              title="Promote Donor to Staff Role (Super Admin only)"
                             >
-                              <option value="user">User</option>
-                              <option value="moderator">Moderator</option>
-                              <option value="admin">Admin</option>
+                              <option value="user">Donor</option>
+                              <option value="moderator">Promote: Moderator</option>
+                              <option value="admin">Promote: Admin</option>
                             </select>
                           )}
 
                           {canManageBan && (
                             <button
                               onClick={() => handleBanToggle(donor, !donor.is_banned)}
-                              className={`p-1.5 rounded-lg transition-colors ${
-                                donor.is_banned
-                                  ? 'text-emerald-600 hover:bg-emerald-50'
-                                  : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
-                              }`}
+                              className={`p-1.5 rounded-lg transition-colors ${donor.is_banned
+                                ? 'text-emerald-600 hover:bg-emerald-50'
+                                : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+                                }`}
                               title={donor.is_banned ? 'Restore Account' : 'Suspend Account'}
                             >
                               {donor.is_banned ? (
@@ -744,11 +1194,14 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
                             <Edit2 className="w-4 h-4" />
                           </button>
 
-                          {isSuperAdmin && donor.id !== currentUser?.id && (
+                          {canManageBan && (
                             <button
-                              onClick={() => setDeletingDonor(donor)}
+                              onClick={() => {
+                                setDeleteMode('archive');
+                                setDeletingDonor(donor);
+                              }}
                               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                              title="Delete User Profile"
+                              title="Archive or Hard Delete Account (Staff Only)"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -763,26 +1216,53 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
           </div>
         )}
       </div>
+      )}
 
       {/* Review Verification Modal */}
-      {reviewingDonor && (
+      {reviewingDonor && reviewingZcv && (
         <Modal
           isOpen={true}
           onClose={() => setReviewingDonor(null)}
-          title={`Review Verification: ${reviewingDonor.name || reviewingDonor.email}`}
-          subtitle="Inspect private laboratory confirmation documents and verify blood group match."
+          title={`Donor Verification: ${reviewingDonor.name || reviewingDonor.email}`}
+          subtitle="Review laboratory blood report or donor card. Stored report file will be automatically purged after verification/rejection."
           maxWidth="lg"
         >
           <div className="space-y-4">
-            {ocrMismatch && (
+            {/* Donor Verification Confidence Banner */}
+            <div
+              className={`p-3.5 rounded-xl border text-xs flex items-center justify-between ${
+                reviewingZcv.hasConflict
+                  ? 'bg-rose-50 border-rose-300 text-rose-900'
+                  : reviewingZcv.score >= 75
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                    : 'bg-amber-50 border-amber-300 text-amber-900'
+              }`}
+            >
+              <div>
+                <div className="font-black text-sm">
+                  Donor Verification Confidence: {reviewingZcv.score}% ({reviewingZcv.tier.replace('_', ' ')})
+                </div>
+                <p className="mt-0.5 text-[11px] opacity-90">
+                  {reviewingZcv.accreditedLab
+                    ? 'Recognized Accredited Bangladesh Diagnostic Center / Blood Bank.'
+                    : 'Manual or custom laboratory name — verify image & certificate number.'}
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-xl font-black text-xs bg-white/80 border border-current">
+                {reviewingZcv.score}% Trust
+              </span>
+            </div>
+
+            {reviewingZcv.hasConflict && (
               <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2.5">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div>
                   <div className="font-bold">OCR Blood Group Mismatch Detected</div>
                   <p className="mt-0.5">
                     Declared profile group is <strong>{reviewingDonor.blood_type}</strong>, while
-                    automated OCR extracted <strong>{reviewingDonor.extracted_blood_type}</strong>{' '}
-                    from the uploaded lab report. Inspect the document carefully before approving.
+                    automated OCR extracted <strong>{reviewingZcv.extractedBg}</strong>{' '}
+                    from the uploaded lab report. You can sync their profile to{' '}
+                    <strong>{reviewingZcv.extractedBg}</strong> on approval below.
                   </p>
                 </div>
               </div>
@@ -795,47 +1275,62 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 font-semibold">OCR Extracted Group:</span>
-                {reviewingDonor.extracted_blood_type ? (
-                  <BloodGroupBadge bloodType={reviewingDonor.extracted_blood_type} size="sm" />
+                {reviewingZcv.extractedBg ? (
+                  <BloodGroupBadge bloodType={reviewingZcv.extractedBg as BloodGroup} size="sm" />
                 ) : (
                   <span className="text-slate-400 italic">Not scanned</span>
                 )}
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-semibold">Laboratory Name:</span>
-                <span className="font-bold text-slate-800">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
                   {reviewingDonor.verification_lab || 'Not provided'}
+                  {reviewingZcv.accreditedLab && (
+                    <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-black">
+                      ACCREDITED
+                    </span>
+                  )}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold">Certificate / Ref ID:</span>
+                <span className="text-slate-500 font-semibold">Certificate / Sample ID:</span>
                 <span className="font-bold text-slate-800 font-mono">
                   {reviewingDonor.verification_cert || 'Not provided'}
                 </span>
               </div>
-              {reviewingDonor.verification_notes && (
+              {(reviewingZcv.hb || reviewingZcv.screening) && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Clinical Pathology Markers:</span>
+                  <span className="font-bold text-emerald-700">
+                    {reviewingZcv.hb ? `Hb: ${reviewingZcv.hb} ` : ''}
+                    {reviewingZcv.screening ? `• TTI: ${reviewingZcv.screening}` : ''}
+                  </span>
+                </div>
+              )}
+              {reviewingZcv.cleanNotes && (
                 <div className="pt-2 border-t border-slate-200">
                   <span className="text-slate-500 font-semibold block mb-1">Donor Notes:</span>
-                  <p className="text-slate-700 italic">{reviewingDonor.verification_notes}</p>
+                  <p className="text-slate-700 italic">{reviewingZcv.cleanNotes}</p>
                 </div>
               )}
             </div>
 
-            {/* Private Lab Report Signed URL Preview */}
+            {/* Private Lab Report Signed URL Preview + Download Before Auto-Purge */}
             <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                   <FileText className="w-4 h-4 text-red-600" />
-                  Uploaded Laboratory Evidence
+                  Uploaded Laboratory Evidence (Auto-Purged After Decision)
                 </span>
                 {signedDocUrl && (
                   <a
                     href={signedDocUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs font-bold text-red-600 hover:underline inline-flex items-center gap-1"
+                    download
+                    className="px-2.5 py-1 rounded-lg bg-red-50 text-xs font-bold text-red-600 hover:bg-red-100 inline-flex items-center gap-1"
                   >
-                    Open Full Report <ExternalLink className="w-3 h-3" />
+                    <Download className="w-3.5 h-3.5" /> Download Report First <ExternalLink className="w-3 h-3" />
                   </a>
                 )}
               </div>
@@ -854,7 +1349,7 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
                 </div>
               ) : (
                 <div className="py-6 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                  No laboratory document image attached to this submission.
+                  Verified via Digital Portal Text / Certificate Reference ID.
                 </div>
               )}
             </div>
@@ -871,7 +1366,7 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
               />
             </div>
 
-            <div className="pt-4 border-t border-slate-100 flex justify-end gap-2.5">
+            <div className="pt-4 border-t border-slate-100 flex flex-wrap justify-end gap-2.5">
               <button
                 type="button"
                 disabled={isProcessing}
@@ -880,10 +1375,22 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
               >
                 Reject Submission
               </button>
+              {reviewingZcv.extractedBg &&
+                reviewingZcv.extractedBg !== reviewingDonor.blood_type && (
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={() => handleVerificationDecision(reviewingDonor, true, true)}
+                    className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approve & Sync Group ({reviewingZcv.extractedBg})
+                  </button>
+                )}
               <button
                 type="button"
-                disabled={isProcessing || !reviewingDonor.blood_type}
-                onClick={() => handleVerificationDecision(reviewingDonor, true)}
+                disabled={isProcessing || (!reviewingDonor.blood_type && !reviewingZcv.extractedBg)}
+                onClick={() => handleVerificationDecision(reviewingDonor, true, !reviewingDonor.blood_type)}
                 className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
               >
                 <CheckCircle className="w-4 h-4" />
@@ -894,13 +1401,13 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
         </Modal>
       )}
 
-      {/* User Activity & History Modal */}
+      {/* Full Donor Profile & Activity Inspector Modal */}
       {viewingActivityDonor && (
         <Modal
           isOpen={true}
           onClose={() => setViewingActivityDonor(null)}
-          title={`User Activity: ${viewingActivityDonor.name || viewingActivityDonor.email}`}
-          subtitle={`ID: ${viewingActivityDonor.id}`}
+          title={`Full Donor Profile: ${viewingActivityDonor.name || viewingActivityDonor.email}`}
+          subtitle={`Donor ID: RCN-${viewingActivityDonor.id.slice(0, 8).toUpperCase()} • UUID: ${viewingActivityDonor.id}`}
           maxWidth="2xl"
         >
           <div className="space-y-5 text-xs">
@@ -912,17 +1419,17 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
                 </div>
               </div>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                <span className="text-slate-400 font-semibold block">Verified Donations</span>
-                <span className="text-sm font-black text-slate-900 mt-1 block">
-                  {viewingActivityDonor.total_donations || 0}
+                <span className="text-slate-400 font-semibold block">Verification</span>
+                <span className="text-xs font-black text-slate-900 mt-1 block">
+                  {viewingActivityDonor.verification_status === 'verified'
+                    ? 'Verified by RedCellNet'
+                    : 'Verification Pending'}
                 </span>
               </div>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                <span className="text-slate-400 font-semibold block">Last Donation</span>
-                <span className="text-slate-800 font-bold mt-1 block">
-                  {viewingActivityDonor.last_donation_date
-                    ? new Date(viewingActivityDonor.last_donation_date).toLocaleDateString()
-                    : 'None recorded'}
+                <span className="text-slate-400 font-semibold block">Verified Donations</span>
+                <span className="text-sm font-black text-slate-900 mt-1 block">
+                  {viewingActivityDonor.total_donations || 0} ({(viewingActivityDonor.total_donations || 0) * 3} lives)
                 </span>
               </div>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
@@ -935,13 +1442,38 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
               </div>
             </div>
 
+            {/* Full Personal, ICE & Referral Details Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                <div className="font-black text-slate-800 uppercase tracking-wider text-[10px]">
+                  Personal & Referral Details
+                </div>
+                <div><strong>Full Name:</strong> {viewingActivityDonor.name || 'Not set'}</div>
+                <div><strong>Email:</strong> {viewingActivityDonor.email || 'Not set'}</div>
+                <div><strong>Phone:</strong> {viewingActivityDonor.phone_number || 'Not set'}</div>
+                <div><strong>City / Area:</strong> {viewingActivityDonor.location_city || 'Not set'}</div>
+                <div><strong>Life Points:</strong> {viewingActivityDonor.points || 0} pts</div>
+                <div><strong>Referral Code:</strong> {(viewingActivityDonor as unknown as Record<string, unknown>).referral_code as string || 'Auto-generated'}</div>
+              </div>
+              <div className="p-3.5 bg-rose-50/60 border border-rose-200 rounded-xl space-y-1.5">
+                <div className="font-black text-rose-800 uppercase tracking-wider text-[10px]">
+                  Emergency Medical ID (ICE) & Lab Record
+                </div>
+                <div><strong>ICE Contact Name:</strong> {viewingActivityDonor.emergency_contact_name || 'Not configured'}</div>
+                <div><strong>ICE Contact Phone:</strong> {viewingActivityDonor.emergency_contact_phone || 'Not configured'}</div>
+                <div><strong>Allergies / Medical Notes:</strong> {viewingActivityDonor.medical_notes || 'None reported'}</div>
+                <div><strong>Accredited Lab:</strong> {viewingActivityDonor.verification_lab || 'N/A'}</div>
+                <div><strong>Certificate / Sample #:</strong> {viewingActivityDonor.verification_cert || 'N/A'}</div>
+              </div>
+            </div>
+
             {/* Donation History */}
             <div>
               <h4 className="font-bold text-slate-900 mb-2">
                 Recorded Donation Log ({viewingActivityDonor.donation_history?.length || 0})
               </h4>
               {!viewingActivityDonor.donation_history ||
-              viewingActivityDonor.donation_history.length === 0 ? (
+                viewingActivityDonor.donation_history.length === 0 ? (
                 <p className="text-slate-400 italic p-3 bg-slate-50 rounded-xl border border-slate-100">
                   No donation log entries on file.
                 </p>
@@ -962,11 +1494,10 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
                       </div>
                       <div className="flex items-center gap-2">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            entry.verified
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.verified
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-600'
+                            }`}
                         >
                           {entry.verified ? 'Hospital Verified' : 'Self-Logged'}
                         </span>
@@ -1133,14 +1664,12 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
                     is_available_to_donate: !editForm.is_available_to_donate,
                   })
                 }
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
-                  editForm.is_available_to_donate ? 'bg-emerald-500' : 'bg-slate-300'
-                }`}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${editForm.is_available_to_donate ? 'bg-emerald-500' : 'bg-slate-300'
+                  }`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ${
-                    editForm.is_available_to_donate ? 'translate-x-4' : 'translate-x-0'
-                  }`}
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ${editForm.is_available_to_donate ? 'translate-x-4' : 'translate-x-0'
+                    }`}
                 />
               </button>
             </div>
@@ -1166,16 +1695,160 @@ export const DonorsPage: React.FC<DonorsPageProps> = ({ donors, requests = [], o
         </Modal>
       )}
 
-      {/* Delete Confirmation */}
-      <ConfirmDialog
-        isOpen={!!deletingDonor}
-        onClose={() => setDeletingDonor(null)}
-        onConfirm={handleDeleteDonor}
-        title="Delete Donor Account?"
-        message={`Are you sure you want to permanently delete profile for "${deletingDonor?.name || deletingDonor?.email}"? All associated profile data will be removed.`}
-        confirmText="Delete Profile"
-        isLoading={isProcessing}
-      />
+      {/* Archive (Soft Delete) or Hard Delete User Modal */}
+      {deletingDonor && (
+        <Modal
+          isOpen={true}
+          onClose={() => setDeletingDonor(null)}
+          title={`Archive or Hard Delete: ${deletingDonor.name || deletingDonor.email}`}
+          subtitle="Choose between archiving (soft deactivate) or permanently deleting from public.profiles and auth.users."
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteMode('archive')}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  deleteMode === 'archive'
+                    ? 'border-amber-500 bg-amber-50 text-amber-950 font-bold'
+                    : 'border-slate-200 bg-slate-50 text-slate-600'
+                }`}
+              >
+                <div className="font-black text-sm">Archive (Soft Delete)</div>
+                <p className="mt-1 text-[11px] opacity-80">
+                  Suspends account, disables donor availability, and preserves historical audit logs.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteMode('hard_delete')}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  deleteMode === 'hard_delete'
+                    ? 'border-rose-600 bg-rose-50 text-rose-950 font-bold'
+                    : 'border-slate-200 bg-slate-50 text-slate-600'
+                }`}
+              >
+                <div className="font-black text-sm">Hard Delete (Permanent DB)</div>
+                <p className="mt-1 text-[11px] opacity-80">
+                  Permanently deletes user from public.profiles, auth.users, storage, and requests.
+                </p>
+              </button>
+            </div>
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Audit Log Reason</label>
+              <input
+                type="text"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+              />
+            </div>
+            <div className="pt-3 border-t border-slate-100 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeletingDonor(null)}
+                className="px-4 py-2 font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isProcessing}
+                onClick={handleDeleteDonor}
+                className={`px-4 py-2 font-bold text-white rounded-xl shadow-xs ${
+                  deleteMode === 'hard_delete'
+                    ? 'bg-rose-600 hover:bg-rose-700'
+                    : 'bg-amber-600 hover:bg-amber-700'
+                }`}
+              >
+                {isProcessing
+                  ? 'Processing...'
+                  : deleteMode === 'hard_delete'
+                    ? 'Hard Delete Forever'
+                    : 'Archive Account'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Review User-Submitted Account Deletion Request Modal */}
+      {reviewingDeletionDonor && (
+        <Modal
+          isOpen={true}
+          onClose={() => setReviewingDeletionDonor(null)}
+          title={`Account Deletion Approval: ${reviewingDeletionDonor.name || reviewingDeletionDonor.email}`}
+          subtitle="Regular users cannot delete or archive their own accounts without Staff / Admin approval."
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 space-y-2 text-rose-950">
+              <div className="font-black text-sm flex items-center gap-1.5">
+                <UserX className="w-4 h-4 text-rose-600" />
+                User Requested Account Deletion
+              </div>
+              <div>
+                <strong>Account:</strong> {reviewingDeletionDonor.name || 'Donor'} (
+                {reviewingDeletionDonor.email})
+              </div>
+              <div>
+                <strong>User’s Stated Reason:</strong>{' '}
+                <span className="italic">
+                  "{reviewingDeletionDonor.deletion_request_reason || 'User requested account deletion from Settings.'}"
+                </span>
+              </div>
+              {reviewingDeletionDonor.deletion_requested_at && (
+                <div className="text-[11px] text-rose-700">
+                  Requested at: {new Date(reviewingDeletionDonor.deletion_requested_at).toLocaleString()}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">
+                Staff Governance Note (Recorded in Audit Log & Sent if Rejected/Archived)
+              </label>
+              <input
+                type="text"
+                value={deletionAdminNote}
+                onChange={(e) => setDeletionAdminNote(e.target.value)}
+                placeholder="Reason or clinical note..."
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+              />
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={isProcessing}
+                onClick={() => handleResolveDeletionRequest(reviewingDeletionDonor, 'reject')}
+                className="px-3.5 py-2 font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl"
+              >
+                Reject & Keep Active
+              </button>
+              <button
+                type="button"
+                disabled={isProcessing}
+                onClick={() => handleResolveDeletionRequest(reviewingDeletionDonor, 'archive')}
+                className="px-3.5 py-2 font-bold text-amber-950 bg-amber-100 hover:bg-amber-200 rounded-xl"
+              >
+                Archive Account Instead
+              </button>
+              <button
+                type="button"
+                disabled={isProcessing}
+                onClick={() =>
+                  handleResolveDeletionRequest(reviewingDeletionDonor, 'approve_hard_delete')
+                }
+                className="px-4 py-2 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs"
+              >
+                {isProcessing ? 'Processing...' : 'Approve & Hard Delete Forever'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RedCellNet</string>
+    <string name="widget_description">RedCellNet Digital Donor Pass (4x2): Blood Group, Verification &amp; 90-Day Readiness Progress</string>
+    <string name="widget_emergency_description">RedCellNet Emergency Blood SOS &amp; Dispatch Hub (4x2): 1-Tap Blood SOS &amp; Live Feed</string>
+    <string name="widget_compact_description">RedCellNet Compact Blood Group &amp; Readiness Tile (2x2)</string>
+</resources>

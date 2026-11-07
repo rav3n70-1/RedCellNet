@@ -1,19 +1,24 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest 
+    
+    
+    
+    
+    
+    xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
-
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
-
-   <application
+    <application
         android:label="RedCellNet"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
-
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -30,7 +35,6 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-
             <!-- Deep Link for Supabase Auth Callback -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -44,6 +48,44 @@
                     android:host="reset-callback" />
             </intent-filter>
         </activity>
+
+        <!-- RedCellNet Native Home Screen AppWidgets (3 Distinct Widgets) -->
+        <receiver
+            android:name=".RedCellNetWidgetProvider"
+            android:exported="true"
+            android:label="RedCellNet Digital Donor Pass (4x2)">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/redcellnet_app_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".RedCellNetEmergencyWidgetProvider"
+            android:exported="true"
+            android:label="RedCellNet Emergency Blood SOS (4x2)">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/redcellnet_emergency_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".RedCellNetCompactWidgetProvider"
+            android:exported="true"
+            android:label="RedCellNet Compact Blood Group Tile (2x2)">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/redcellnet_compact_widget_info" />
+        </receiver>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

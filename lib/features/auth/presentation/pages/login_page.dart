@@ -38,7 +38,10 @@ class _LoginPageState extends State<LoginPage> {
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        // Supabase onAuthStateChange automatically notifies AuthGate to navigate.
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true)
+              .pushNamedAndRemoveUntil('/', (route) => false);
+        }
       } on AuthException catch (e) {
         setState(() {
           _errorMessage = e.message;
@@ -74,6 +77,10 @@ class _LoginPageState extends State<LoginPage> {
         // User cancelled the prompt
         if (mounted) setState(() => _isGoogleLoading = false);
         return;
+      }
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true)
+            .pushNamedAndRemoveUntil('/', (route) => false);
       }
     } on AuthException catch (e) {
       if (mounted) {

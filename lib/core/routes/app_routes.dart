@@ -94,13 +94,17 @@ class AppRoutes {
       case home:
         return MaterialPageRoute(
           settings: settings,
-          builder: (_) => const ProtectedRoute(child: HomePage()),
+          builder: (_) => const ProtectedRoute(
+            child: DonorWorkspaceGuard(child: HomePage()),
+          ),
         );
 
       case profile:
         return MaterialPageRoute(
           settings: settings,
-          builder: (_) => const ProtectedRoute(child: ProfilePage()),
+          builder: (_) => const ProtectedRoute(
+            child: DonorWorkspaceGuard(child: ProfilePage()),
+          ),
         );
 
       case editProfile:
@@ -220,8 +224,7 @@ class _StaffRoleGuardState extends State<StaffRoleGuard> {
         final role = (data?['role'] ?? 'user').toString().toLowerCase().trim();
         final isBanned =
             data?['is_banned'] == true || data?['isBanned'] == true;
-        final isStaff =
-            !isBanned && (role == 'admin' || role == 'moderator');
+        final isStaff = !isBanned && (role == 'admin' || role == 'moderator');
         if (!isStaff) {
           return Scaffold(
             backgroundColor: AppColors.scaffoldOf(context),
@@ -247,8 +250,8 @@ class _StaffRoleGuardState extends State<StaffRoleGuard> {
                     Text(
                       'Only authorized RedCellNet administrators and moderators may access this console.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: AppColors.textSecondaryOf(context)),
+                      style:
+                          TextStyle(color: AppColors.textSecondaryOf(context)),
                     ),
                     const SizedBox(height: 20),
                     ElevatedButton(
@@ -267,6 +270,55 @@ class _StaffRoleGuardState extends State<StaffRoleGuard> {
               ),
             ),
           );
+        }
+        return widget.child;
+      },
+    );
+  }
+}
+
+/// Ensures Admin & Staff accounts ('admin', 'moderator') are strictly separated
+/// from regular donor views and always land in the Admin & Staff Console.
+class DonorWorkspaceGuard extends StatefulWidget {
+  final Widget child;
+  const DonorWorkspaceGuard({super.key, required this.child});
+
+  @override
+  State<DonorWorkspaceGuard> createState() => _DonorWorkspaceGuardState();
+}
+
+class _DonorWorkspaceGuardState extends State<DonorWorkspaceGuard> {
+  Future<ProfileSnapshot>? _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = SupabaseAuthService().currentUserId;
+    if (uid != null) {
+      _profileFuture = UserProfileService().getUserProfile(uid);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_profileFuture == null) {
+      return widget.child;
+    }
+    return FutureBuilder<ProfileSnapshot>(
+      future: _profileFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return Scaffold(
+            backgroundColor: AppColors.scaffoldOf(context),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        final data = snapshot.data?.data();
+        final role = (data?['role'] ?? 'user').toString().toLowerCase().trim();
+        final isStaff = role == 'admin' || role == 'moderator';
+        if (isStaff) {
+          return const AdminDashboardPage();
         }
         return widget.child;
       },

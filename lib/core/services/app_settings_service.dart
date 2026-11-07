@@ -1,6 +1,8 @@
 // lib/core/services/app_settings_service.dart
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSettingsService {
@@ -8,12 +10,16 @@ class AppSettingsService {
   factory AppSettingsService() => _instance;
   AppSettingsService._internal();
 
+  static const MethodChannel _nativeChannel =
+      MethodChannel('com.redcellnet.lifepulse/native_bridge');
+
   static const String _keyThemeMode = 'rcn_theme_mode';
   static const String _keyLanguage = 'rcn_language';
   static const String _keyOnboardingDone = 'rcn_onboarding_completed';
   static const String _keyRequestDraft = 'rcn_blood_request_draft';
   static const String _keyBookmarkedRequests = 'rcn_bookmarked_requests';
   static const String _keyStaffWorkspaceMode = 'rcn_staff_workspace_mode';
+  static const String _keyBiometricLockEnabled = 'rcn_biometric_lock_enabled';
 
   // Zero-Cost Offline & Health Keys
   static const String _keyCachedEmergencyRequests = 'rcn_cached_emergency_requests';
@@ -42,6 +48,16 @@ class AppSettingsService {
   /// Tracks whether the donor's streak is currently protected by Medical Freeze.
   final ValueNotifier<bool> streakFrozenNotifier = ValueNotifier<bool>(false);
   String? _streakFreezeReason;
+
+  /// Tracks whether Biometric App Lock (Face / Fingerprint) is enabled.
+  final ValueNotifier<bool> biometricLockEnabledNotifier =
+      ValueNotifier<bool>(false);
+  final ValueNotifier<bool> biometricSessionUnlockedNotifier =
+      ValueNotifier<bool>(false);
+
+  /// Post-login / Post-signup interactive greeting state (`'login'` or `'signup'`).
+  final ValueNotifier<String?> pendingInteractiveGreetingNotifier =
+      ValueNotifier<String?>(null);
 
   Future<void> init() async {
     if (_initialized) return;
@@ -75,6 +91,10 @@ class AppSettingsService {
 
       streakFrozenNotifier.value = _prefs?.getBool(_keyStreakFrozen) ?? false;
       _streakFreezeReason = _prefs?.getString(_keyStreakFreezeReason);
+
+      final bioEnabled = _prefs?.getBool(_keyBiometricLockEnabled) ?? false;
+      biometricLockEnabledNotifier.value = bioEnabled;
+      biometricSessionUnlockedNotifier.value = !bioEnabled;
 
       _initialized = true;
     } catch (e) {
@@ -579,9 +599,150 @@ class AppSettingsService {
     return 'RCN-${cleanBg.isNotEmpty ? '$cleanBg-' : ''}$suffix';
   }
 
+  // --- Biometric Security (Face + Fingerprint) & Native Home Screen Widget Bridge ---
+  bool get isBiometricLockEnabled => biometricLockEnabledNotifier.value;
+  bool get biometricLockEnabled => biometricLockEnabledNotifier.value;
+
+  Future<bool> canCheckBiometrics() async {
+    if (kIsWeb) return false;
+    try {
+      final supported =
+          await _nativeChannel.invokeMethod<bool>('canCheckBiometrics');
+      return supported ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> isBiometricAvailable() => canCheckBiometrics();
+
+  Future<bool> authenticateBiometric({
+    String reason = 'Unlock RedCellNet LifePulse with Face or Fingerprint',
+  }) async {
+    if (kIsWeb) {
+      biometricSessionUnlockedNotifier.value = true;
+      return true;
+    }
+    try {
+      final ok = await _nativeChannel.invokeMethod<bool>(
+        'authenticateBiometric',
+        {'reason': reason},
+      );
+      if (ok == true) {
+        biometricSessionUnlockedNotifier.value = true;
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> authenticateWithBiometrics({
+    String reason = 'Unlock RedCellNet LifePulse with Face or Fingerprint',
+  }) =>
+      authenticateBiometric(reason: reason);
+
+  Future<void> setBiometricLockEnabled(bool enabled) async {
+    biometricLockEnabledNotifier.value = enabled;
+    biometricSessionUnlockedNotifier.value = true;
+    final prefs = await _ensurePrefs();
+    await prefs?.setBool(_keyBiometricLockEnabled, enabled);
+  }
+
+  void triggerInteractiveGreeting(String mode) {
+    pendingInteractiveGreetingNotifier.value = mode;
+  }
+
+  String? consumeInteractiveGreeting() {
+    final val = pendingInteractiveGreetingNotifier.value;
+    pendingInteractiveGreetingNotifier.value = null;
+    return val;
+  }
+
+  Future<void> syncHomeScreenWidget({
+    required String donorName,
+    String? bloodType,
+    String? bloodGroup,
+    String? donorId,
+    bool? isVerified,
+    String? verificationStatus,
+    String? verifiedText,
+    String? eligibilityText,
+    String? statusText,
+    String? nextEligibleText,
+    bool? isEligible,
+    String? statsText,
+    String? donationsText,
+    String? city,
+    int? totalDonations,
+    int? points,
+  }) async {
+    if (kIsWeb) return;
+    final resolvedBlood = (bloodType ?? bloodGroup ?? 'UNSET').trim();
+    final resolvedVerified = isVerified ??
+        ((verifiedText ?? verificationStatus ?? '')
+            .toLowerCase()
+            .contains('verified by redcellnet'));
+    final resolvedVerificationStatus = verifiedText ??
+        verificationStatus ??
+        (resolvedVerified ? 'Verified by RedCellNet' : 'Verification Pending');
+    final resolvedEligibility = eligibilityText ??
+        statusText ??
+        nextEligibleText ??
+        ((isEligible ?? true)
+            ? 'Ready to Save Lives'
+            : 'Recovery Cooldown Active');
+    final resolvedStats = statsText ??
+        donationsText ??
+        '${totalDonations ?? 0} Donations${city != null && city.isNotEmpty ? ' • $city' : ''}${points != null ? ' • $points Pts' : ''}';
+    try {
+      await _nativeChannel.invokeMethod('updateHomeWidget', {
+        'donorName': donorName,
+        'bloodType': resolvedBlood.isEmpty ? 'UNSET' : resolvedBlood,
+        'donorId': donorId ?? '',
+        'isVerified': resolvedVerified,
+        'verificationStatus': resolvedVerificationStatus,
+        'eligibilityText': resolvedEligibility,
+        'isEligible': isEligible ?? true,
+        'statsText': resolvedStats,
+      });
+    } catch (_) {}
+  }
+
+  Future<bool> requestPinHomeScreenWidget() async {
+    if (kIsWeb) return false;
+    try {
+      final pinned =
+          await _nativeChannel.invokeMethod<bool>('requestPinHomeWidget');
+      return pinned ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // --- English Key Aliases (resolves snake_case keys like nav_profile) ---
+  static const Map<String, String> _enAliases = {
+    'nav_profile': 'Donor Profile',
+    'nav_home': 'Home',
+    'nav_requests': 'Blood Requests',
+    'nav_nearby': 'Nearby Map',
+    'nav_learn': 'Health Guide',
+    'nav_settings': 'Settings',
+  };
+
   // --- English & Bengali Dictionary ---
   static const Map<String, String> _bnDictionary = {
-    // Navigation
+    // Navigation & Aliases
+    'nav_profile': 'রক্তদাতা প্রোফাইল',
+    'Donor Profile': 'রক্তদাতা প্রোফাইল',
+    'nav_home': 'হোম',
+    'nav_requests': 'রক্তের আবেদন',
+    'nav_nearby': 'কাছাকাছি',
+    'nav_learn': 'স্বাস্থ্য জ্ঞান',
+    'nav_settings': 'সেটিংস',
+    'Settings': 'সেটিংস',
+    'Recognition & Milestones': 'স্বীকৃতি ও মাইলফলক',
     'Home': 'হোম',
     'Requests': 'রক্তের আবেদন',
     'Nearby': 'কাছাকাছি',
@@ -607,9 +768,11 @@ class AppSettingsService {
     'Connecting Donors • Saving Lives': 'রক্তদাতা সংযোগ • জীবন রক্ষা',
     'Become a Life Saver': 'জীবন রক্ষাকারী হোন',
     'Full Name': 'পূর্ণ নাম',
+    'Nickname / Last Name': 'ডাকনাম / শেষ নাম',
     'Phone Number': 'মোবাইল নম্বর',
     'Blood Group': 'রক্তের গ্রুপ',
     'City / Area': 'শহর / এলাকা',
+    'Referral Code (Optional)': 'রেফারেল কোড (ঐচ্ছিক)',
     'Skip': 'এড়িয়ে যান',
     'Next': 'পরবর্তী',
     'Get Started': 'শুরু করুন',
@@ -667,6 +830,9 @@ class AppSettingsService {
 
     // Profile, Verification & Settings
     'Edit Profile': 'প্রোফাইল সম্পাদনা',
+    'Verified by RedCellNet': 'RedCellNet দ্বারা যাচাইকৃত',
+    'Verification Pending': 'যাচাইয়ের অপেক্ষায়',
+    'Donor Verification': 'রক্তদাতা যাচাইকরণ',
     'Verified Donor': 'যাচাইকৃত রক্তদাতা',
     'Pending Verification': 'যাচাইয়ের অপেক্ষায়',
     'Unverified': 'অযাচাইকৃত',
@@ -687,11 +853,12 @@ class AppSettingsService {
   };
 
   String tr(String englishKey, {String? bn}) {
+    final resolvedEn = _enAliases[englishKey] ?? englishKey;
     if (isBengali) {
       if (bn != null && bn.isNotEmpty) return bn;
-      final mapped = _bnDictionary[englishKey];
+      final mapped = _bnDictionary[englishKey] ?? _bnDictionary[resolvedEn];
       if (mapped != null && mapped.isNotEmpty) return mapped;
     }
-    return englishKey;
+    return resolvedEn;
   }
 }

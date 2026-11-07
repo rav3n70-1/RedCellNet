@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:red_cell_net_final/core/models/supabase_snapshot.dart';
@@ -47,12 +48,20 @@ class _RequestDetailsPageState extends State<RequestDetailsPage> {
 
   bool _isProcessingAction = false;
   Map<String, dynamic>? _currentUserProfileData;
+  Timer? _liveLocationTimer;
+  String? _activeTrackingOfferId;
 
   @override
   void initState() {
     super.initState();
     _requestStream = _requestService.getRequestStream(widget.requestId);
     _checkCurrentUserProfile();
+  }
+
+  @override
+  void dispose() {
+    _liveLocationTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkCurrentUserProfile() async {
@@ -1171,13 +1180,28 @@ class _RequestDetailsPageState extends State<RequestDetailsPage> {
                 ),
               ),
               children: [
-                TileLayer(
-                  urlTemplate: isDark
-                      ? 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-                      : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.red_cell_net',
-                  maxZoom: 19,
-                ),
+                if (isDark)
+                  ColorFiltered(
+                    colorFilter: const ColorFilter.matrix(<double>[
+                      -0.82, 0, 0, 0, 215,
+                      0, -0.82, 0, 0, 222,
+                      0, 0, -0.75, 0, 235,
+                      0, 0, 0, 1, 0,
+                    ]),
+                    child: TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'org.redcellnet.lifepulse',
+                      maxZoom: 19,
+                    ),
+                  )
+                else
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'org.redcellnet.lifepulse',
+                    maxZoom: 19,
+                  ),
                 MarkerLayer(
                   markers: [
                     Marker(
@@ -1397,9 +1421,684 @@ class _RequestDetailsPageState extends State<RequestDetailsPage> {
     );
   }
 
+  Future<LatLng> _resolveDonorCurrentPosition(GeoPoint? hospitalCoords) async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (serviceEnabled) {
+        LocationPermission permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission == LocationPermission.always ||
+            permission == LocationPermission.whileInUse) {
+          final pos = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+          ).timeout(const Duration(seconds: 7));
+          return LatLng(pos.latitude, pos.longitude);
+        }
+      }
+    } catch (_) {}
+
+    // Fallback to donor profile coordinates or realistic nearby offset around hospital/Dhaka
+    final profileCoords = _currentUserProfileData?['locationCoords'];
+    if (profileCoords is GeoPoint) {
+      return LatLng(profileCoords.latitude, profileCoords.longitude);
+    }
+    if (hospitalCoords != null) {
+      return LatLng(
+        hospitalCoords.latitude + 0.011,
+        hospitalCoords.longitude - 0.009,
+      );
+    }
+    return const LatLng(23.7461, 90.3742);
+  }
+
+  void _startDonorLiveLocationBroadcastTimer(
+    String offerId,
+    GeoPoint? hospitalCoords,
+  ) {
+    _liveLocationTimer?.cancel();
+    _activeTrackingOfferId = offerId;
+    _liveLocationTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) async {
+        if (!mounted || _activeTrackingOfferId != offerId) {
+          _liveLocationTimer?.cancel();
+          return;
+        }
+        try {
+          final pos = await _resolveDonorCurrentPosition(hospitalCoords);
+          final double hLat = hospitalCoords?.latitude ?? 23.7260;
+          final double hLng = hospitalCoords?.longitude ?? 90.3976;
+          final double distKm = Geolocator.distanceBetween(
+                pos.latitude,
+                pos.longitude,
+                hLat,
+                hLng,
+              ) /
+              1000.0;
+          final int etaMins = (distKm * 3.2).round().clamp(2, 180);
+          await _requestService.manageOfferLocationTracking(
+            requestId: widget.requestId,
+            offerId: offerId,
+            action: 'update_location',
+            latitude: pos.latitude,
+            longitude: pos.longitude,
+            distanceKm: double.parse(distKm.toStringAsFixed(2)),
+            etaMinutes: etaMins,
+          );
+        } catch (_) {}
+      },
+    );
+  }
+
+  Future<void> _handleLocationTrackingAction({
+    required String offerId,
+    required String donorName,
+    required String action,
+    GeoPoint? hospitalCoords,
+  }) async {
+    setState(() => _isProcessingAction = true);
+    try {
+      double? lat;
+      double? lng;
+      double? distKm;
+      int? etaMins;
+
+      if (action == 'accept_tracking' || action == 'update_location') {
+        final pos = await _resolveDonorCurrentPosition(hospitalCoords);
+        lat = pos.latitude;
+        lng = pos.longitude;
+        final double hLat = hospitalCoords?.latitude ?? 23.7260;
+        final double hLng = hospitalCoords?.longitude ?? 90.3976;
+        final rawDist = Geolocator.distanceBetween(
+              lat,
+              lng,
+              hLat,
+              hLng,
+            ) /
+            1000.0;
+        distKm = double.parse(rawDist.toStringAsFixed(2));
+        etaMins = (rawDist * 3.2).round().clamp(2, 180);
+      }
+
+      await _requestService.manageOfferLocationTracking(
+        requestId: widget.requestId,
+        offerId: offerId,
+        action: action,
+        latitude: lat,
+        longitude: lng,
+        distanceKm: distKm,
+        etaMinutes: etaMins,
+      );
+
+      if (action == 'accept_tracking' || action == 'update_location') {
+        _startDonorLiveLocationBroadcastTimer(offerId, hospitalCoords);
+      } else if (action == 'stop_tracking' || action == 'decline_tracking') {
+        _liveLocationTimer?.cancel();
+        _activeTrackingOfferId = null;
+      }
+
+      if (!mounted) return;
+      String msg = 'Location tracking updated.';
+      if (action == 'request_tracking') {
+        msg =
+            'Live location tracking request sent to $donorName. Waiting for donor consent.';
+      } else if (action == 'accept_tracking') {
+        msg =
+            'Live location sharing activated! The receiver can now track your route to the hospital.';
+      } else if (action == 'update_location') {
+        msg = 'Live GPS position & hospital ETA updated!';
+      } else if (action == 'decline_tracking') {
+        msg = 'Location tracking request declined.';
+      } else if (action == 'stop_tracking') {
+        msg = 'Stopped sharing live location.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor:
+              (action == 'decline_tracking' || action == 'stop_tracking')
+                  ? AppColors.warningDark
+                  : AppColors.success,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Location tracking error: $e'),
+            backgroundColor: AppColors.critical,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessingAction = false);
+    }
+  }
+
+  void _showLiveDonorTrackingMapSheet({
+    required Map<String, dynamic> initialOffer,
+    required GeoPoint? hospitalCoords,
+    required String hospitalName,
+    required String hospitalAddress,
+  }) {
+    final String offerId = initialOffer['id']?.toString() ?? '';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return StreamBuilder<AppDocSnapshot>(
+          stream: _requestService.getRequestStream(widget.requestId),
+          builder: (ctx, snap) {
+            Map<String, dynamic> liveOffer = initialOffer;
+            final reqData = snap.data?.data();
+            if (reqData != null && reqData['offers'] is List) {
+              for (final item in (reqData['offers'] as List)) {
+                if (item is Map &&
+                    (item['id']?.toString() == offerId ||
+                        item['donorId']?.toString() ==
+                            initialOffer['donorId']?.toString())) {
+                  liveOffer = Map<String, dynamic>.from(item);
+                  break;
+                }
+              }
+            }
+
+            final String donorName =
+                (liveOffer['donorName'] ?? 'Confirmed Donor').toString();
+            final String donorBlood =
+                (liveOffer['donorBloodType'] ?? '').toString();
+            final String donorPhone =
+                (liveOffer['donorPhone'] ?? '').toString();
+            final bool isSelf =
+                liveOffer['donorId']?.toString() == currentUserId;
+
+            final double hLat = hospitalCoords?.latitude ?? 23.7260;
+            final double hLng = hospitalCoords?.longitude ?? 90.3976;
+            final LatLng hospitalPoint = LatLng(hLat, hLng);
+
+            final double dLat = (liveOffer['donorLatitude'] is num)
+                ? (liveOffer['donorLatitude'] as num).toDouble()
+                : (double.tryParse(
+                        liveOffer['donorLatitude']?.toString() ?? '') ??
+                    (hLat + 0.011));
+            final double dLng = (liveOffer['donorLongitude'] is num)
+                ? (liveOffer['donorLongitude'] as num).toDouble()
+                : (double.tryParse(
+                        liveOffer['donorLongitude']?.toString() ?? '') ??
+                    (hLng - 0.009));
+            final LatLng donorPoint = LatLng(dLat, dLng);
+
+            final double distKm = (liveOffer['donorDistanceKm'] is num)
+                ? (liveOffer['donorDistanceKm'] as num).toDouble()
+                : (Geolocator.distanceBetween(dLat, dLng, hLat, hLng) / 1000.0);
+            final int etaMinutes = (liveOffer['donorEtaMinutes'] is num)
+                ? (liveOffer['donorEtaMinutes'] as num).toInt()
+                : (distKm * 3.2).round().clamp(2, 180);
+            final String updatedAtRaw =
+                (liveOffer['donorLocationUpdatedAt'] ?? '').toString();
+            final String updatedLabel = updatedAtRaw.isNotEmpty
+                ? _formatIsoTime(updatedAtRaw)
+                : 'Just now';
+
+            final LatLng centerPoint = LatLng(
+              (hLat + dLat) / 2.0,
+              (hLng + dLng) / 2.0,
+            );
+            final isDark = AppColors.isDark(ctx);
+
+            return Container(
+              height: MediaQuery.of(ctx).size.height * 0.84,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceOf(ctx),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Column(
+                children: [
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.borderOf(ctx),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.vitalEmerald
+                                    .withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(
+                                Icons.radar_rounded,
+                                color: AppColors.vitalEmerald,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          'Live Donor Route Tracker',
+                                          style: TextStyle(
+                                            fontSize: 16.5,
+                                            fontWeight: FontWeight.w900,
+                                            color: AppColors.textPrimaryOf(ctx),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.vitalEmerald,
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: const Text(
+                                          'LIVE GPS',
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w900,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    '$donorName ($donorBlood) -> $hospitalName',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondaryOf(ctx),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Interactive Live Map
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            FlutterMap(
+                              options: MapOptions(
+                                initialCenter: centerPoint,
+                                initialZoom: distKm > 8
+                                    ? 11.8
+                                    : (distKm > 3 ? 13.2 : 14.5),
+                              ),
+                              children: [
+                                if (isDark)
+                                  ColorFiltered(
+                                    colorFilter:
+                                        const ColorFilter.matrix(<double>[
+                                      -0.82, 0, 0, 0, 215,
+                                      0, -0.82, 0, 0, 222,
+                                      0, 0, -0.75, 0, 235,
+                                      0, 0, 0, 1, 0,
+                                    ]),
+                                    child: TileLayer(
+                                      urlTemplate:
+                                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                      userAgentPackageName:
+                                          'org.redcellnet.lifepulse',
+                                      maxZoom: 19,
+                                    ),
+                                  )
+                                else
+                                  TileLayer(
+                                    urlTemplate:
+                                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                    userAgentPackageName:
+                                        'org.redcellnet.lifepulse',
+                                    maxZoom: 19,
+                                  ),
+                                PolylineLayer(
+                                  polylines: [
+                                    Polyline(
+                                      points: [donorPoint, hospitalPoint],
+                                      strokeWidth: 4.5,
+                                      color: AppColors.vitalEmerald,
+                                    ),
+                                  ],
+                                ),
+                                MarkerLayer(
+                                  markers: [
+                                    // Hospital Marker
+                                    Marker(
+                                      point: hospitalPoint,
+                                      width: 110,
+                                      height: 68,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 7, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primary,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: const Text(
+                                              'HOSPITAL',
+                                              style: TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w900,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Container(
+                                            width: 38,
+                                            height: 38,
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primary,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                  color: Colors.white,
+                                                  width: 2.5),
+                                            ),
+                                            child: const Icon(
+                                              Icons.local_hospital_rounded,
+                                              color: Colors.white,
+                                              size: 20,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Donor Live Marker
+                                    Marker(
+                                      point: donorPoint,
+                                      width: 130,
+                                      height: 72,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.vitalEmerald,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              'DONOR ($donorBlood)',
+                                              style: const TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w900,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Container(
+                                            width: 40,
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                              color: AppColors.vitalEmerald,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                  color: Colors.white,
+                                                  width: 2.5),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: AppColors.vitalEmerald
+                                                      .withValues(alpha: 0.55),
+                                                  blurRadius: 12,
+                                                  spreadRadius: 3,
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Icon(
+                                              Icons.person_pin_circle_rounded,
+                                              color: Colors.white,
+                                              size: 22,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Positioned(
+                              top: 12,
+                              left: 12,
+                              right: 12,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.cardBg(ctx)
+                                      .withValues(alpha: 0.94),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border:
+                                      Border.all(color: AppColors.borderOf(ctx)),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceAround,
+                                  children: [
+                                    Column(
+                                      children: [
+                                        Text(
+                                          '${distKm.toStringAsFixed(1)} km',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 15,
+                                            color: AppColors.textPrimaryOf(ctx),
+                                          ),
+                                        ),
+                                        Text(
+                                          'Distance',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            color:
+                                                AppColors.textSecondaryOf(ctx),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Container(
+                                      width: 1,
+                                      height: 26,
+                                      color: AppColors.borderOf(ctx),
+                                    ),
+                                    Column(
+                                      children: [
+                                        Text(
+                                          '~$etaMinutes min',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 15,
+                                            color: AppColors.vitalEmerald,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Hospital ETA',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            color:
+                                                AppColors.textSecondaryOf(ctx),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Container(
+                                      width: 1,
+                                      height: 26,
+                                      color: AppColors.borderOf(ctx),
+                                    ),
+                                    Column(
+                                      children: [
+                                        Text(
+                                          updatedLabel,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 11.5,
+                                            color: AppColors.textPrimaryOf(ctx),
+                                          ),
+                                        ),
+                                        Text(
+                                          'Last GPS Ping',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            color:
+                                                AppColors.textSecondaryOf(ctx),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Bottom Action Controls
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+                    child: SafeArea(
+                      top: false,
+                      child: Row(
+                        children: [
+                          if (donorPhone.isNotEmpty && !isSelf) ...[
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.success,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                onPressed: () => _callPhoneNumber(donorPhone),
+                                icon: const Icon(Icons.call_rounded, size: 18),
+                                label: Text(
+                                  'Call $donorName',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          if (isSelf) ...[
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.vitalEmerald,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                onPressed: () => _handleLocationTrackingAction(
+                                  offerId: offerId,
+                                  donorName: donorName,
+                                  action: 'update_location',
+                                  hospitalCoords: hospitalCoords,
+                                ),
+                                icon: const Icon(Icons.my_location_rounded,
+                                    size: 18),
+                                label: const Text(
+                                  'Ping GPS Now',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () => _openHospitalDirections(
+                                hospitalCoords,
+                                hospitalName,
+                                hospitalAddress,
+                              ),
+                              icon: const Icon(Icons.directions_rounded,
+                                  size: 18),
+                              label: const Text(
+                                'Google Maps',
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildAcceptedDonorsSection({
     required List<Map<String, dynamic>> acceptedOffers,
     required bool canManageRequest,
+    GeoPoint? hospitalCoords,
+    String hospitalName = 'Hospital',
+    String hospitalAddress = '',
   }) {
     if (acceptedOffers.isEmpty) return const SizedBox.shrink();
     final isDark = AppColors.isDark(context);
@@ -1430,6 +2129,16 @@ class _RequestDetailsPageState extends State<RequestDetailsPage> {
           final bool isSelf = donorId.isNotEmpty && donorId == currentUserId;
           final bool canViewDonorPhone =
               canManageRequest || _isStaff || isSelf;
+          final String trackingStatus =
+              (offer['locationTrackingStatus'] ?? 'none')
+                  .toString()
+                  .toLowerCase();
+          final double? donorDistKm = (offer['donorDistanceKm'] is num)
+              ? (offer['donorDistanceKm'] as num).toDouble()
+              : double.tryParse(offer['donorDistanceKm']?.toString() ?? '');
+          final int? donorEtaMins = (offer['donorEtaMinutes'] is num)
+              ? (offer['donorEtaMinutes'] as num).toInt()
+              : int.tryParse(offer['donorEtaMinutes']?.toString() ?? '');
 
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
@@ -1531,6 +2240,338 @@ class _RequestDetailsPageState extends State<RequestDetailsPage> {
                     ],
                   ],
                 ),
+
+                // --- Mutual-Consent Live Donor Location Tracking Controls ---
+                if (!donationVerified) ...[
+                  const SizedBox(height: 10),
+                  // 1. Active Live Location Tracking Banner (Visible to Receiver, Staff, and Donor)
+                  if (trackingStatus == 'active')
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.vitalEmerald.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.vitalEmerald.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.my_location_rounded,
+                                color: AppColors.vitalEmerald,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Live Location Tracking Active${donorDistKm != null ? " • ${donorDistKm.toStringAsFixed(1)} km away" : ""}${donorEtaMins != null ? " (~$donorEtaMins min ETA)" : ""}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimaryOf(context),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.vitalEmerald,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                onPressed: () => _showLiveDonorTrackingMapSheet(
+                                  initialOffer: offer,
+                                  hospitalCoords: hospitalCoords,
+                                  hospitalName: hospitalName,
+                                  hospitalAddress: hospitalAddress,
+                                ),
+                                icon:
+                                    const Icon(Icons.radar_rounded, size: 15),
+                                label: const Text(
+                                  'Track Live on Map',
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              if (isSelf) ...[
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 8),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: _isProcessingAction
+                                      ? null
+                                      : () => _handleLocationTrackingAction(
+                                            offerId: offerId,
+                                            donorName: donorName,
+                                            action: 'update_location',
+                                            hospitalCoords: hospitalCoords,
+                                          ),
+                                  icon: const Icon(Icons.refresh_rounded,
+                                      size: 14),
+                                  label: const Text(
+                                    'Update GPS',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 6),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    foregroundColor: AppColors.critical,
+                                  ),
+                                  onPressed: _isProcessingAction
+                                      ? null
+                                      : () => _handleLocationTrackingAction(
+                                            offerId: offerId,
+                                            donorName: donorName,
+                                            action: 'stop_tracking',
+                                            hospitalCoords: hospitalCoords,
+                                          ),
+                                  child: const Text(
+                                    'Stop Sharing',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  // 2. Donor View when Receiver Requested Location Tracking
+                  else if (isSelf && trackingStatus == 'requested')
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.secondary.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.location_searching_rounded,
+                                color: AppColors.secondary,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Receiver Requested Live Location Tracking',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.textPrimaryOf(context),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Accept to share your live GPS route and hospital ETA with the patient\'s attendant until your donation is completed.',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.textSecondaryOf(context),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.vitalEmerald,
+                                    foregroundColor: Colors.white,
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 8),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  onPressed: _isProcessingAction
+                                      ? null
+                                      : () => _handleLocationTrackingAction(
+                                            offerId: offerId,
+                                            donorName: donorName,
+                                            action: 'accept_tracking',
+                                            hospitalCoords: hospitalCoords,
+                                          ),
+                                  icon: const Icon(Icons.location_on_rounded,
+                                      size: 16),
+                                  label: const Text(
+                                    'Accept & Share Location',
+                                    style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                onPressed: _isProcessingAction
+                                    ? null
+                                    : () => _handleLocationTrackingAction(
+                                          offerId: offerId,
+                                          donorName: donorName,
+                                          action: 'decline_tracking',
+                                          hospitalCoords: hospitalCoords,
+                                        ),
+                                child: const Text(
+                                  'Decline',
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  // 3. Receiver View when Request is Pending Donor Consent
+                  else if (canManageRequest && trackingStatus == 'requested')
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.secondary.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.hourglass_top_rounded,
+                            size: 16,
+                            color: AppColors.secondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Location tracking requested • Waiting for $donorName to accept',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimaryOf(context),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  // 4. Receiver Button to Request Donor Location Tracking (or Donor Button to Proactively Share)
+                  else if (canManageRequest)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.secondary,
+                          side: BorderSide(
+                            color: AppColors.secondary.withValues(alpha: 0.55),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: _isProcessingAction
+                            ? null
+                            : () => _handleLocationTrackingAction(
+                                  offerId: offerId,
+                                  donorName: donorName,
+                                  action: 'request_tracking',
+                                  hospitalCoords: hospitalCoords,
+                                ),
+                        icon: const Icon(Icons.my_location_rounded, size: 16),
+                        label: Text(
+                          trackingStatus == 'declined'
+                              ? 'Re-Request Donor Live Location Tracking'
+                              : 'Request Donor Live Location Tracking',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (isSelf)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.vitalEmerald,
+                          side: BorderSide(
+                            color:
+                                AppColors.vitalEmerald.withValues(alpha: 0.55),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: _isProcessingAction
+                            ? null
+                            : () => _handleLocationTrackingAction(
+                                  offerId: offerId,
+                                  donorName: donorName,
+                                  action: 'accept_tracking',
+                                  hospitalCoords: hospitalCoords,
+                                ),
+                        icon: const Icon(Icons.share_location_rounded, size: 16),
+                        label: const Text(
+                          'Share My Live Route with Receiver',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
                 if (canManageRequest && !donationVerified) ...[
                   const SizedBox(height: 10),
                   Row(
@@ -2717,6 +3758,9 @@ class _RequestDetailsPageState extends State<RequestDetailsPage> {
                     _buildAcceptedDonorsSection(
                       acceptedOffers: acceptedOffers,
                       canManageRequest: canManageRequest,
+                      hospitalCoords: geoPoint,
+                      hospitalName: hospitalName,
+                      hospitalAddress: hospitalAddress,
                     ),
 
                     // --- Pending Offers Section ---

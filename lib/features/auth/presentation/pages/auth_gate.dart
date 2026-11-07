@@ -35,6 +35,10 @@ class _AuthGateState extends State<AuthGate> {
           setState(() => _isPasswordRecovery = true);
         } else if (state.event == AuthChangeEvent.signedOut) {
           setState(() => _isPasswordRecovery = false);
+          try {
+            Navigator.of(context, rootNavigator: true)
+                .popUntil((route) => route.isFirst);
+          } catch (_) {}
         }
       });
     }
@@ -147,8 +151,6 @@ class _RoleBasedSessionRouterState extends State<_RoleBasedSessionRouter> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = AppSettingsService();
-
     return StreamBuilder<ProfileSnapshot>(
       stream: _profileStream,
       builder: (context, snapshot) {
@@ -184,20 +186,132 @@ class _RoleBasedSessionRouterState extends State<_RoleBasedSessionRouter> {
             (profile['role'] ?? 'user').toString().toLowerCase().trim();
         final isStaff = role == 'admin' || role == 'moderator';
 
-        if (isStaff) {
-          return ValueListenableBuilder<String>(
-            valueListenable: settings.staffWorkspaceModeNotifier,
-            builder: (context, mode, _) {
-              if (mode == 'donor') {
-                return const HomePage();
-              }
-              return const AdminDashboardPage();
-            },
-          );
-        }
+        // Admin & Staff accounts are strictly separated from regular donors
+        // and always route exclusively to the Operations & Governance Console.
+        final Widget destination =
+            isStaff ? const AdminDashboardPage() : const HomePage();
 
-        return const HomePage();
+        return ValueListenableBuilder<bool>(
+          valueListenable: AppSettingsService().biometricLockEnabledNotifier,
+          builder: (context, bioEnabled, _) {
+            if (!bioEnabled) return destination;
+            return ValueListenableBuilder<bool>(
+              valueListenable:
+                  AppSettingsService().biometricSessionUnlockedNotifier,
+              builder: (context, unlocked, _) {
+                if (unlocked) return destination;
+                return const _BiometricLockScreen();
+              },
+            );
+          },
+        );
       },
+    );
+  }
+}
+
+class _BiometricLockScreen extends StatefulWidget {
+  const _BiometricLockScreen();
+
+  @override
+  State<_BiometricLockScreen> createState() => _BiometricLockScreenState();
+}
+
+class _BiometricLockScreenState extends State<_BiometricLockScreen> {
+  bool _authenticating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _unlock());
+  }
+
+  Future<void> _unlock() async {
+    if (_authenticating) return;
+    setState(() => _authenticating = true);
+    await AppSettingsService().authenticateBiometric();
+    if (mounted) {
+      setState(() => _authenticating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.scaffoldOf(context),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.35),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.fingerprint_rounded,
+                    size: 56,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Text(
+                  'Biometric Lock Active',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimaryOf(context),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Authenticate with Face ID or Fingerprint to access your RedCellNet medical profile.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: AppColors.textSecondaryOf(context),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 240,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: _authenticating ? null : _unlock,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.face_unlock_rounded, size: 20),
+                    label: Text(
+                      _authenticating ? 'Verifying...' : 'Unlock Now',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextButton(
+                  onPressed: () async {
+                    await SupabaseAuthService().signOut();
+                  },
+                  child: const Text('Sign Out Instead'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

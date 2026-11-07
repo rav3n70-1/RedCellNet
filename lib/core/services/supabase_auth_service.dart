@@ -2,7 +2,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:red_cell_net_final/core/config/supabase_config.dart';
+import 'package:red_cell_net_final/core/services/app_settings_service.dart';
 import 'package:red_cell_net_final/features/profile/data/services/user_profile_service.dart';
+import 'package:red_cell_net_final/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Centralized service handling Supabase Authentication across the app.
@@ -57,14 +59,19 @@ class SupabaseAuthService {
     required String email,
     required String password,
     String? name,
+    String? nickname,
     String? bloodType,
     String? phoneNumber,
     String? locationCity,
+    String? referralCode,
   }) async {
     final Map<String, dynamic> data = {};
     if (name != null && name.trim().isNotEmpty) {
       data['name'] = name.trim();
       data['full_name'] = name.trim();
+    }
+    if (nickname != null && nickname.trim().isNotEmpty) {
+      data['nickname'] = nickname.trim();
     }
     if (bloodType != null && bloodType.trim().isNotEmpty) {
       data['blood_type'] = bloodType.trim();
@@ -74,6 +81,9 @@ class SupabaseAuthService {
     }
     if (locationCity != null && locationCity.trim().isNotEmpty) {
       data['location_city'] = locationCity.trim();
+    }
+    if (referralCode != null && referralCode.trim().isNotEmpty) {
+      data['referred_by_code'] = referralCode.trim().toUpperCase();
     }
 
     try {
@@ -91,10 +101,17 @@ class SupabaseAuthService {
           userId: response.user!.id,
           email: response.user!.email ?? email,
           name: name?.trim(),
+          nickname: nickname?.trim(),
           bloodType: bloodType?.trim(),
           phoneNumber: phoneNumber?.trim(),
           locationCity: locationCity?.trim(),
         );
+        if (referralCode != null && referralCode.trim().isNotEmpty) {
+          try {
+            await UserProfileService().applyReferralCode(referralCode.trim());
+          } catch (_) {}
+        }
+        AppSettingsService().triggerInteractiveGreeting('signup');
       }
 
       return response;
@@ -120,6 +137,7 @@ class SupabaseAuthService {
           userId: response.user!.id,
           email: response.user!.email ?? email,
         );
+        AppSettingsService().triggerInteractiveGreeting('login');
       }
 
       return response;
@@ -185,6 +203,7 @@ class SupabaseAuthService {
           email: response.user!.email ?? googleUser.email,
           name: googleUser.displayName,
         );
+        AppSettingsService().triggerInteractiveGreeting('login');
       }
 
       return response;
@@ -220,14 +239,28 @@ class SupabaseAuthService {
     }
   }
 
-  /// Signs out the currently authenticated user.
+  /// Signs out the currently authenticated user, clears Google/biometric session state,
+  /// and resets the root navigation stack cleanly back to AuthGate ('/').
   Future<void> signOut() async {
+    AppSettingsService().biometricSessionUnlockedNotifier.value = false;
     try {
-      await _client.auth.signOut();
-    } catch (e) {
-      debugPrint('SupabaseAuthService.signOut error: $e');
-      rethrow;
+      await GoogleSignIn().signOut();
+    } catch (_) {}
+
+    if (SupabaseConfig.isInitialized) {
+      try {
+        await _client.auth.signOut();
+      } catch (e) {
+        debugPrint('SupabaseAuthService.signOut network fallback: $e');
+        try {
+          await _client.auth.signOut(scope: SignOutScope.local);
+        } catch (_) {}
+      }
     }
+
+    try {
+      navigatorKey.currentState?.pushNamedAndRemoveUntil('/', (route) => false);
+    } catch (_) {}
   }
 
   /// Safely ensures a row in `public.profiles` exists without EVER overwriting
@@ -236,6 +269,7 @@ class SupabaseAuthService {
     required String userId,
     required String email,
     String? name,
+    String? nickname,
     String? bloodType,
     String? phoneNumber,
     String? locationCity,
@@ -245,6 +279,7 @@ class SupabaseAuthService {
         uid: userId,
         email: email,
         name: name,
+        nickname: nickname,
         bloodType: bloodType,
         phoneNumber: phoneNumber,
         locationCity: locationCity,

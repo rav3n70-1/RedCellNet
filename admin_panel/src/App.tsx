@@ -19,6 +19,7 @@ import type {
   BloodRequest,
   DonationCenter,
   EducationalContent,
+  NotificationItem,
   ReportItem,
   UserProfile,
 } from './types';
@@ -29,20 +30,30 @@ const AdminApp: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
 
   // Database State
-  const [donors, setDonors] = useState<UserProfile[]>([]);
+  const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
   const [requests, setRequests] = useState<BloodRequest[]>([]);
   const [facilities, setFacilities] = useState<DonationCenter[]>([]);
   const [content, setContent] = useState<EducationalContent[]>([]);
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AdminLog[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Strictly separate Regular Donors (role === 'user') from Admin & Staff (admin / moderator)
+  const donors = allProfiles.filter(
+    (p) => (p.role || 'user').toLowerCase() === 'user'
+  );
+  const staffMembers = allProfiles.filter((p) => {
+    const r = (p.role || 'user').toLowerCase();
+    return r === 'admin' || r === 'moderator';
+  });
 
   // Fetch all core data (only for authorized staff)
   const fetchData = useCallback(async () => {
-    if (!isStaff) return;
+    if (!isStaff || !user) return;
     setIsRefreshing(true);
     try {
-      const [donorsRes, requestsRes, centersRes, contentRes, reportsRes, logsRes] =
+      const [donorsRes, requestsRes, centersRes, contentRes, reportsRes, logsRes, notifsRes] =
         await Promise.all([
           supabase.from('profiles').select('*').order('created_at', { ascending: false }),
           supabase.from('blood_requests').select('*').order('created_at', { ascending: false }),
@@ -54,20 +65,27 @@ const AdminApp: React.FC = () => {
             .select('*')
             .order('created_at', { ascending: false })
             .limit(200),
+          supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(40),
         ]);
 
-      if (!donorsRes.error && donorsRes.data) setDonors(donorsRes.data as UserProfile[]);
+      if (!donorsRes.error && donorsRes.data) setAllProfiles(donorsRes.data as UserProfile[]);
       if (!requestsRes.error && requestsRes.data) setRequests(requestsRes.data as BloodRequest[]);
       if (!centersRes.error && centersRes.data) setFacilities(centersRes.data as DonationCenter[]);
       if (!contentRes.error && contentRes.data) setContent(contentRes.data as EducationalContent[]);
       if (!reportsRes.error && reportsRes.data) setReports(reportsRes.data as ReportItem[]);
       if (!logsRes.error && logsRes.data) setAuditLogs(logsRes.data as AdminLog[]);
+      if (!notifsRes.error && notifsRes.data) setNotifications(notifsRes.data as NotificationItem[]);
     } catch (err) {
       console.error('Error loading admin portal data:', err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [isStaff]);
+  }, [isStaff, user]);
 
   // Initial load and Realtime setup
   useEffect(() => {
@@ -91,12 +109,30 @@ const AdminApp: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_logs' }, () =>
         fetchData()
       )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () =>
+        fetchData()
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [user, isStaff, fetchData]);
+
+  const handleMarkNotificationRead = async (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    if (!user) return;
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', user.id)
+      .eq('is_read', false);
+  };
 
   if (authLoading) {
     return (
@@ -153,6 +189,9 @@ const AdminApp: React.FC = () => {
 
   // Pending counters
   const pendingVerificationsCount = donors.filter((d) => d.verification_status === 'pending').length;
+  const pendingDeletionRequestsCount = donors.filter(
+    (d) => Boolean(d.deletion_requested) || d.deletion_request_status === 'pending'
+  ).length;
   const criticalRequestsCount = requests.filter(
     (r) =>
       (r.status === 'Open' || r.status === 'Partially Fulfilled') && r.urgency_level === 'Critical'
@@ -166,12 +205,17 @@ const AdminApp: React.FC = () => {
       onRefresh={fetchData}
       isRefreshing={isRefreshing}
       pendingVerificationsCount={pendingVerificationsCount}
+      pendingDeletionRequestsCount={pendingDeletionRequestsCount}
       criticalRequestsCount={criticalRequestsCount}
       pendingReportsCount={pendingReportsCount}
+      notifications={notifications}
+      onMarkNotificationRead={handleMarkNotificationRead}
+      onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
     >
       {currentTab === 'dashboard' && (
         <DashboardPage
           donors={donors}
+          staffMembers={staffMembers}
           requests={requests}
           facilities={facilities}
           reports={reports}
@@ -181,7 +225,12 @@ const AdminApp: React.FC = () => {
       )}
 
       {currentTab === 'donors' && (
-        <DonorsPage donors={donors} requests={requests} onRefresh={fetchData} />
+        <DonorsPage
+          donors={donors}
+          staffMembers={staffMembers}
+          requests={requests}
+          onRefresh={fetchData}
+        />
       )}
 
       {currentTab === 'requests' && (
@@ -198,7 +247,7 @@ const AdminApp: React.FC = () => {
         <ReportsPage
           reports={reports}
           requests={requests}
-          donors={donors}
+          donors={allProfiles}
           onRefresh={fetchData}
         />
       )}
@@ -210,7 +259,7 @@ const AdminApp: React.FC = () => {
       )}
 
       {currentTab === 'audit_logs' && (
-        <AuditLogsPage logs={auditLogs} donors={donors} onRefresh={fetchData} />
+        <AuditLogsPage logs={auditLogs} donors={allProfiles} onRefresh={fetchData} />
       )}
     </Layout>
   );

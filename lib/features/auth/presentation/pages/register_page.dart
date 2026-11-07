@@ -4,6 +4,8 @@ import 'package:red_cell_net_final/core/services/app_settings_service.dart';
 import 'package:red_cell_net_final/core/services/supabase_auth_service.dart';
 import 'package:red_cell_net_final/core/theme/app_theme.dart';
 import 'package:red_cell_net_final/core/utils/blood_compatibility.dart';
+import 'package:red_cell_net_final/core/widgets/common_widgets.dart';
+import 'package:red_cell_net_final/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -16,9 +18,11 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _nicknameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _cityController = TextEditingController();
+  final _referralController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -44,9 +48,11 @@ class _RegisterPageState extends State<RegisterPage> {
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
           name: _nameController.text.trim(),
+          nickname: _nicknameController.text.trim(),
           bloodType: _selectedBloodGroup,
           phoneNumber: _phoneController.text.trim(),
           locationCity: _cityController.text.trim(),
+          referralCode: _referralController.text.trim(),
         );
 
         if (mounted) {
@@ -65,8 +71,11 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
           );
 
-          Future.delayed(const Duration(milliseconds: 700), () {
-            if (mounted && Navigator.canPop(context)) {
+          Future.delayed(const Duration(milliseconds: 400), () {
+            if (!emailConfirmationRequired) {
+              navigatorKey.currentState
+                  ?.pushNamedAndRemoveUntil('/', (route) => false);
+            } else if (mounted && Navigator.canPop(context)) {
               Navigator.of(context).pop();
             }
           });
@@ -97,9 +106,11 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   void dispose() {
     _nameController.dispose();
+    _nicknameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _cityController.dispose();
+    _referralController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -126,63 +137,47 @@ class _RegisterPageState extends State<RegisterPage> {
         child: Center(
           child: SingleChildScrollView(
             padding:
-                const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                const EdgeInsets.symmetric(horizontal: 22.0, vertical: 14.0),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 68,
-                      height: 68,
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF4C0519)
-                            : AppColors.primaryLight,
-                        shape: BoxShape.circle,
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      child: Image.asset(
-                        'assets/icon/icon.png',
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.favorite_rounded,
-                                size: 36, color: AppColors.primary),
-                      ),
-                    ),
+                  const Center(
+                    child: RedCellNetLogo(size: 68),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   Text(
                     settings.tr('Become a Life Saver'),
                     style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 23,
+                      fontWeight: FontWeight.w900,
                       color: AppColors.textPrimaryOf(context),
                       letterSpacing: -0.4,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     'Join our verified blood donor & hospital response network',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13.5,
                       color: AppColors.textSecondaryOf(context),
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
 
                   if (_errorMessage != null)
                     Container(
-                      margin: const EdgeInsets.only(bottom: 20.0),
+                      margin: const EdgeInsets.only(bottom: 18.0),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14.0, vertical: 12.0),
                       decoration: BoxDecoration(
                         color: AppColors.critical
                             .withValues(alpha: isDark ? 0.18 : 0.10),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                             color: AppColors.critical.withValues(alpha: 0.40)),
                       ),
@@ -207,7 +202,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                     ),
 
-                  // Name Field
+                  // Full Name Field
                   TextFormField(
                     controller: _nameController,
                     enabled: !_isLoading,
@@ -225,7 +220,22 @@ class _RegisterPageState extends State<RegisterPage> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
+
+                  // Nickname / Preferred Last Name (Optional)
+                  TextFormField(
+                    controller: _nicknameController,
+                    enabled: !_isLoading,
+                    keyboardType: TextInputType.name,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText:
+                          '${settings.tr('Nickname / Last Name')} (Optional)',
+                      hintText: 'e.g. Ahmed (shown in Home greeting)',
+                      prefixIcon: const Icon(Icons.badge_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
                   // Email Field
                   TextFormField(
@@ -254,58 +264,115 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Blood Group + City Row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 5,
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: _selectedBloodGroup,
-                          decoration: InputDecoration(
-                            labelText: settings.tr('Blood Group'),
-                            prefixIcon: const Icon(Icons.bloodtype_outlined),
-                          ),
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('Not sure yet'),
+                  // Clean Full-Width Blood Group Selector Box (Never overflows!)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBg(context),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.borderOf(context)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.bloodtype_outlined,
+                              size: 19,
+                              color: AppColors.primary,
                             ),
-                            ...BloodCompatibility.validBloodGroups.map(
-                              (bg) => DropdownMenuItem<String?>(
-                                value: bg,
-                                child: Text(bg,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w700)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                settings.tr('Blood Group'),
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimaryOf(context),
+                                ),
+                              ),
+                            ),
+                            Text(
+                              _selectedBloodGroup ?? 'Not sure yet',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _selectedBloodGroup != null
+                                    ? AppColors.primary
+                                    : AppColors.textSecondaryOf(context),
                               ),
                             ),
                           ],
-                          onChanged: _isLoading
-                              ? null
-                              : (val) =>
-                                  setState(() => _selectedBloodGroup = val),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 6,
-                        child: TextFormField(
-                          controller: _cityController,
-                          enabled: !_isLoading,
-                          textInputAction: TextInputAction.next,
-                          decoration: InputDecoration(
-                            labelText: settings.tr('City / Area'),
-                            hintText: 'Dhaka',
-                            prefixIcon:
-                                const Icon(Icons.location_city_outlined),
-                          ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ...BloodCompatibility.validBloodGroups.map((bg) {
+                              final bool selected = _selectedBloodGroup == bg;
+                              return ChoiceChip(
+                                label: Text(
+                                  bg,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: selected
+                                        ? Colors.white
+                                        : AppColors.textPrimaryOf(context),
+                                  ),
+                                ),
+                                selected: selected,
+                                selectedColor: AppColors.primary,
+                                backgroundColor: AppColors.mutedOf(context),
+                                onSelected: _isLoading
+                                    ? null
+                                    : (_) => setState(
+                                          () => _selectedBloodGroup = bg,
+                                        ),
+                              );
+                            }),
+                            ChoiceChip(
+                              label: Text(
+                                'Not sure yet',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12.5,
+                                  color: _selectedBloodGroup == null
+                                      ? Colors.white
+                                      : AppColors.textSecondaryOf(context),
+                                ),
+                              ),
+                              selected: _selectedBloodGroup == null,
+                              selectedColor: AppColors.secondary,
+                              backgroundColor: AppColors.mutedOf(context),
+                              onSelected: _isLoading
+                                  ? null
+                                  : (_) => setState(
+                                        () => _selectedBloodGroup = null,
+                                      ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
 
-                  // Optional Phone Number
+                  // City / Area + Optional Phone Row
+                  TextFormField(
+                    controller: _cityController,
+                    enabled: !_isLoading,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: settings.tr('City / Area'),
+                      hintText: 'Dhaka',
+                      prefixIcon: const Icon(Icons.location_city_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
                   TextFormField(
                     controller: _phoneController,
                     enabled: !_isLoading,
@@ -317,7 +384,21 @@ class _RegisterPageState extends State<RegisterPage> {
                       prefixIcon: const Icon(Icons.phone_outlined),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
+
+                  // Referral Code Field (Item 13)
+                  TextFormField(
+                    controller: _referralController,
+                    enabled: !_isLoading,
+                    textCapitalization: TextCapitalization.characters,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: settings.tr('Referral Code (Optional)'),
+                      hintText: 'e.g. RCN-OP-4A2F (+25 Bonus Points)',
+                      prefixIcon: const Icon(Icons.card_giftcard_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
                   // Password Field
                   TextFormField(
@@ -350,7 +431,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
 
                   // Confirm Password Field
                   TextFormField(
@@ -387,7 +468,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 22),
 
                   SizedBox(
                     height: 52,
@@ -399,7 +480,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         elevation: 2,
                         shadowColor: AppColors.primary.withValues(alpha: 0.4),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                       child: _isLoading
@@ -421,7 +502,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
 
                   Center(
                     child: InkWell(
@@ -433,7 +514,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             horizontal: 12, vertical: 8),
                         child: RichText(
                           text: TextSpan(
-                            text: "Already have an account? ",
+                            text: 'Already have an account? ',
                             style: TextStyle(
                               color: AppColors.textSecondaryOf(context),
                               fontSize: 14,

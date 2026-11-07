@@ -10,6 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:red_cell_net_final/core/config/supabase_config.dart';
 import 'package:red_cell_net_final/core/services/app_settings_service.dart';
 import 'package:red_cell_net_final/core/services/push_notification_service.dart';
 import 'package:red_cell_net_final/core/theme/app_theme.dart';
@@ -2282,8 +2283,9 @@ class LifeSaverTracker extends StatelessWidget {
 }
 
 /// Interactive 3D Flippable Digital Donor Pass Card (Apple/Google Wallet Style)
-/// with Tier Color Grading, Holographic Sheen, Multi-Tab Back Face, Fullscreen QR,
-/// Medical Streak Freeze, Referral Code, and PNG Pass Image Export.
+/// with All-in-One Donor Details, Tier Color Grading, Holographic Sheen,
+/// Multi-Tab Back Face, Fullscreen QR, Home Screen Widget Pinning, Referral Code,
+/// and Official Printable PDF + High-Res PNG Card Export.
 class DigitalPassCard extends StatefulWidget {
   final String donorName;
   final String bloodType;
@@ -2295,7 +2297,12 @@ class DigitalPassCard extends StatefulWidget {
   final String nextEligibleDate;
   final String emergencyContact;
 
-  // Upgraded Zero-Cost Pass Features (optional for backward compatibility)
+  // All-in-One Donor Details & Zero-Cost Pass Features
+  final String? nickname;
+  final String? email;
+  final String? phone;
+  final String? verificationStatus;
+  final bool isAvailable;
   final int points;
   final int streakCount;
   final bool isStreakFrozen;
@@ -2306,8 +2313,10 @@ class DigitalPassCard extends StatefulWidget {
   final bool isPhoneVerified;
   final String? medicalNotes;
   final String? referralCode;
+  final int referralCount;
   final bool showActionDock;
   final ValueChanged<bool>? onStreakFreezeChanged;
+  final VoidCallback? onOpenReferralSheet;
 
   const DigitalPassCard({
     super.key,
@@ -2320,6 +2329,11 @@ class DigitalPassCard extends StatefulWidget {
     required this.lastDonationDate,
     required this.nextEligibleDate,
     required this.emergencyContact,
+    this.nickname,
+    this.email,
+    this.phone,
+    this.verificationStatus,
+    this.isAvailable = false,
     this.points = 0,
     this.streakCount = 0,
     this.isStreakFrozen = false,
@@ -2330,8 +2344,10 @@ class DigitalPassCard extends StatefulWidget {
     this.isPhoneVerified = false,
     this.medicalNotes,
     this.referralCode,
+    this.referralCount = 0,
     this.showActionDock = false,
     this.onStreakFreezeChanged,
+    this.onOpenReferralSheet,
   });
 
   @override
@@ -2403,6 +2419,14 @@ class _DigitalPassCardState extends State<DigitalPassCard>
     return 'LIFEPULSE PASS';
   }
 
+  String get _verificationBadgeText {
+    if (widget.isVerified ||
+        (widget.verificationStatus ?? '').toLowerCase() == 'approved') {
+      return 'Verified by RedCellNet';
+    }
+    return 'Verification Pending';
+  }
+
   LinearGradient get _frontGradient {
     if (_localStreakFrozen) return AppColors.passFrozenGradient;
     if (widget.totalDonations >= 5 || widget.points >= 500) {
@@ -2439,6 +2463,260 @@ class _DigitalPassCardState extends State<DigitalPassCard>
   String get _qrPayload =>
       'REDCELLNET|ID:${widget.donorId}|BG:${widget.bloodType.isNotEmpty ? widget.bloodType : "UNSET"}|VERIFIED:${widget.isVerified}|TIER:$_tierLabel|DONATIONS:${widget.totalDonations}';
 
+  Future<Uint8List> _buildOfficialDonorCardPdf() async {
+    final doc = pw.Document();
+    final safeBg =
+        widget.bloodType.trim().isNotEmpty ? widget.bloodType.trim() : 'Unset';
+    final safeName = widget.donorName.trim().isNotEmpty
+        ? widget.donorName.trim()
+        : 'RedCellNet Donor';
+    final safeCity = (widget.city ?? '').trim().isNotEmpty
+        ? widget.city!.trim()
+        : 'Bangladesh';
+    final safePhone = (widget.phone ?? '').trim().isNotEmpty
+        ? widget.phone!.trim()
+        : 'On File';
+    final safeEmail = (widget.email ?? '').trim().isNotEmpty
+        ? widget.email!.trim()
+        : 'On File';
+    final safeIce = widget.emergencyContact.trim().isNotEmpty
+        ? widget.emergencyContact.trim()
+        : 'Not Specified';
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Official Card Front
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(24),
+                decoration: pw.BoxDecoration(
+                  color: const PdfColor.fromInt(0xFF881337),
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(18)),
+                  border: pw.Border.all(
+                    color: const PdfColor.fromInt(0xFFF43F5E),
+                    width: 2,
+                  ),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                              'REDCELLNET',
+                              style: pw.TextStyle(
+                                color: PdfColors.white,
+                                fontSize: 20,
+                                fontWeight: pw.FontWeight.bold,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                            pw.SizedBox(height: 2),
+                            pw.Text(
+                              'OFFICIAL DIGITAL DONOR PASS • $_tierLabel',
+                              style: const pw.TextStyle(
+                                color: PdfColor.fromInt(0xFFFDA4AF),
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                        pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: const pw.BoxDecoration(
+                            color: PdfColor.fromInt(0xFFE11D48),
+                            borderRadius:
+                                pw.BorderRadius.all(pw.Radius.circular(12)),
+                          ),
+                          child: pw.Text(
+                            safeBg,
+                            style: pw.TextStyle(
+                              color: PdfColors.white,
+                              fontSize: 22,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.SizedBox(height: 18),
+                    pw.Text(
+                      safeName.toUpperCase(),
+                      style: pw.TextStyle(
+                        color: PdfColors.white,
+                        fontSize: 22,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      '$_verificationBadgeText  •  Donor ID: ${widget.donorId}  •  City: $safeCity',
+                      style: pw.TextStyle(
+                        color: widget.isVerified
+                            ? const PdfColor.fromInt(0xFF6EE7B7)
+                            : const PdfColor.fromInt(0xFFFDE68A),
+                        fontSize: 11,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 16),
+                    pw.Divider(color: const PdfColor.fromInt(0xFFFDA4AF)),
+                    pw.SizedBox(height: 10),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('PHONE',
+                                style: const pw.TextStyle(
+                                    color: PdfColor.fromInt(0xFFFDA4AF),
+                                    fontSize: 8)),
+                            pw.Text(safePhone,
+                                style: pw.TextStyle(
+                                    color: PdfColors.white,
+                                    fontSize: 11,
+                                    fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('EMAIL',
+                                style: const pw.TextStyle(
+                                    color: PdfColor.fromInt(0xFFFDA4AF),
+                                    fontSize: 8)),
+                            pw.Text(safeEmail,
+                                style: pw.TextStyle(
+                                    color: PdfColors.white,
+                                    fontSize: 11,
+                                    fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('DONATIONS / LIVES SAVED',
+                                style: const pw.TextStyle(
+                                    color: PdfColor.fromInt(0xFFFDA4AF),
+                                    fontSize: 8)),
+                            pw.Text(
+                                '${widget.totalDonations} Units / up to ${widget.livesSaved} Lives',
+                                style: pw.TextStyle(
+                                    color: PdfColors.white,
+                                    fontSize: 11,
+                                    fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              // Official Card Back (Credentials & QR)
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(24),
+                decoration: pw.BoxDecoration(
+                  color: const PdfColor.fromInt(0xFF0F172A),
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(18)),
+                  border: pw.Border.all(
+                    color: const PdfColor.fromInt(0xFF334155),
+                    width: 1.5,
+                  ),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'MEDICAL & EMERGENCY CREDENTIALS (BACK)',
+                            style: pw.TextStyle(
+                              color: const PdfColor.fromInt(0xFF94A3B8),
+                              fontSize: 10,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                          pw.SizedBox(height: 12),
+                          pw.Text(
+                            'Last Donation: ${widget.lastDonationDate.isNotEmpty ? widget.lastDonationDate : "None Logged"}',
+                            style: const pw.TextStyle(
+                                color: PdfColors.white, fontSize: 11),
+                          ),
+                          pw.SizedBox(height: 6),
+                          pw.Text(
+                            'Next Eligible: ${widget.nextEligibleDate.isNotEmpty ? widget.nextEligibleDate : "Eligible Now"}',
+                            style: const pw.TextStyle(
+                                color: PdfColors.white, fontSize: 11),
+                          ),
+                          pw.SizedBox(height: 6),
+                          pw.Text(
+                            'Emergency ICE Contact: $safeIce',
+                            style: const pw.TextStyle(
+                                color: PdfColors.white, fontSize: 11),
+                          ),
+                          pw.SizedBox(height: 6),
+                          pw.Text(
+                            'Medical Notes: ${(widget.medicalNotes ?? "").trim().isNotEmpty ? widget.medicalNotes!.trim() : "None recorded"}',
+                            style: const pw.TextStyle(
+                                color: PdfColors.white, fontSize: 11),
+                          ),
+                          pw.SizedBox(height: 6),
+                          pw.Text(
+                            'Invite Code: $_effectiveReferralCode',
+                            style: pw.TextStyle(
+                              color: const PdfColor.fromInt(0xFF34D399),
+                              fontSize: 11,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    pw.SizedBox(width: 20),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColors.white,
+                        borderRadius:
+                            pw.BorderRadius.all(pw.Radius.circular(10)),
+                      ),
+                      child: pw.BarcodeWidget(
+                        barcode: pw.Barcode.qrCode(),
+                        data: _qrPayload,
+                        width: 96,
+                        height: 96,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    return doc.save();
+  }
+
   Future<void> _exportAndSharePassImage() async {
     if (_isExportingImage) return;
     setState(() => _isExportingImage = true);
@@ -2447,7 +2725,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
       final boundary = _repaintBoundaryKey.currentContext?.findRenderObject()
           as RenderRepaintBoundary?;
       if (boundary == null) return;
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final ui.Image image = await boundary.toImage(pixelRatio: 3.5);
       final ByteData? byteData =
           await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
@@ -2461,7 +2739,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
       await Share.shareXFiles(
         [xFile],
         text:
-            '🩸 My Official RedCellNet Digital Donor Pass (${widget.bloodType.trim().isNotEmpty ? widget.bloodType.trim() : "Community Member"}) • Invite Code: $_effectiveReferralCode',
+            '🩸 Official RedCellNet Digital Donor Pass — ${widget.donorName} (${widget.bloodType.trim().isNotEmpty ? widget.bloodType.trim() : "Donor"}) • $_verificationBadgeText • Invite Code: $_effectiveReferralCode',
       );
     } catch (e) {
       if (mounted) {
@@ -2472,6 +2750,122 @@ class _DigitalPassCardState extends State<DigitalPassCard>
     } finally {
       if (mounted) setState(() => _isExportingImage = false);
     }
+  }
+
+  Future<void> _showExportPassOptionsSheet() async {
+    HapticFeedback.selectionClick();
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.cardBg(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.badge_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Export & Share Official Donor Pass',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textPrimaryOf(ctx),
+                            ),
+                          ),
+                          Text(
+                            'Share your verified digital pass or print a 2-sided PDF card',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondaryOf(ctx),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: AppColors.borderOf(ctx)),
+                  ),
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.primary,
+                    child: Icon(Icons.picture_as_pdf_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                  title: const Text(
+                    'Export 2-Sided Printable PDF Card',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                  subtitle: const Text(
+                    'Includes Front + Back, QR Code, ICE Contact & Verification Badge',
+                    style: TextStyle(fontSize: 11.5),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final pdfBytes = await _buildOfficialDonorCardPdf();
+                    await Printing.sharePdf(
+                      bytes: pdfBytes,
+                      filename: 'RedCellNet_Official_Pass_${widget.donorId}.pdf',
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: AppColors.borderOf(ctx)),
+                  ),
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.secondary,
+                    child:
+                        Icon(Icons.image_rounded, color: Colors.white, size: 20),
+                  ),
+                  title: const Text(
+                    'Share High-Resolution PNG Pass Image',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                  subtitle: const Text(
+                    '3.5x HD pass card image ready for WhatsApp, Messenger or Gallery',
+                    style: TextStyle(fontSize: 11.5),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _exportAndSharePassImage();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _openFullscreenQrModal() {
@@ -2738,7 +3132,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
   Widget _buildActionDock(BuildContext context) {
     final isDark = AppColors.isDark(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
         color: isDark
             ? AppColors.darkSurface.withValues(alpha: 0.92)
@@ -2754,9 +3148,9 @@ class _DigitalPassCardState extends State<DigitalPassCard>
             icon: _isExportingImage
                 ? Icons.hourglass_top_rounded
                 : Icons.ios_share_rounded,
-            label: 'Share PNG',
+            label: 'Export Card',
             color: AppColors.primary,
-            onTap: _exportAndSharePassImage,
+            onTap: _showExportPassOptionsSheet,
           ),
           _buildDockAction(
             icon: Icons.qr_code_scanner_rounded,
@@ -2774,18 +3168,18 @@ class _DigitalPassCardState extends State<DigitalPassCard>
           ),
           _buildDockAction(
             icon: Icons.card_giftcard_rounded,
-            label: _effectiveReferralCode,
+            label: 'Invite +50',
             color: AppColors.vitalEmerald,
             onTap: () {
-              Clipboard.setData(ClipboardData(text: _effectiveReferralCode));
-              HapticFeedback.selectionClick();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      'Referral code $_effectiveReferralCode copied! Share with fellow donors.'),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
+              if (widget.onOpenReferralSheet != null) {
+                widget.onOpenReferralSheet!();
+              } else {
+                showReferralProgramSheet(
+                  context,
+                  referralCode: _effectiveReferralCode,
+                  referralCount: widget.referralCount,
+                );
+              }
             },
           ),
         ],
@@ -2803,7 +3197,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2819,7 +3213,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
             Text(
               label,
               style: TextStyle(
-                fontSize: 10.5,
+                fontSize: 10,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textPrimaryOf(context),
               ),
@@ -2835,15 +3229,31 @@ class _DigitalPassCardState extends State<DigitalPassCard>
     final effectiveStreak = widget.streakCount > 0
         ? widget.streakCount
         : (widget.totalDonations > 0 ? 1 : 0);
+    final safeCity = (widget.city ?? '').trim().isNotEmpty
+        ? widget.city!.trim()
+        : 'Bangladesh';
+    final safePhone = (widget.phone ?? '').trim().isNotEmpty
+        ? widget.phone!.trim()
+        : 'Not set';
+    final safeEmail = (widget.email ?? '').trim().isNotEmpty
+        ? widget.email!.trim()
+        : 'Not set';
+    final safeLastDonation = widget.lastDonationDate.trim().isNotEmpty
+        ? widget.lastDonationDate.trim()
+        : 'No donations yet';
+    final safeNextEligible = widget.nextEligibleDate.trim().isNotEmpty
+        ? widget.nextEligibleDate.trim()
+        : 'Eligible Now';
+    final safeNickname = (widget.nickname ?? '').trim();
 
     return Container(
       width: double.infinity,
-      height: 238,
+      constraints: const BoxConstraints(minHeight: 336),
       decoration: BoxDecoration(
         gradient: _frontGradient,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.18),
+          color: Colors.white.withValues(alpha: 0.20),
           width: 1.2,
         ),
         boxShadow: [
@@ -2875,91 +3285,57 @@ class _DigitalPassCardState extends State<DigitalPassCard>
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Top Row: Brand Logo, Tier Pill & Blood Group Badge
+                  // 1. Spacious Top Header: Brand Logo + Full "REDCELLNET" Title + Blood Group Badge
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      const RedCellNetLogo(
+                        size: 40,
+                        showPulseGlow: false,
+                      ),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const RedCellNetLogo(
-                              size: 38,
-                              showPulseGlow: false,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Flexible(
-                                        child: Text(
-                                          "REDCELLNET",
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 13.5,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: 1.2,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.14),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          _tierLabel,
-                                          style: const TextStyle(
-                                            color: Color(0xFFFDE68A),
-                                            fontSize: 7.5,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: 0.6,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  const Text(
-                                    "OFFICIAL DIGITAL DONOR PASS",
-                                    style: TextStyle(
-                                      color: Color(0xFFFDA4AF),
-                                      fontSize: 8.5,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.8,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
+                            const Text(
+                              'REDCELLNET',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.5,
                               ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'OFFICIAL DIGITAL DONOR PASS • $_tierLabel',
+                              style: const TextStyle(
+                                color: Color(0xFFFDA4AF),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.6,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 6),
+                            horizontal: 15, vertical: 7),
                         decoration: BoxDecoration(
                           color: hasBg
                               ? const Color(0xFFE11D48)
                               : Colors.white.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            width: 1,
+                            color: Colors.white.withValues(alpha: 0.28),
+                            width: 1.2,
                           ),
                           boxShadow: hasBg
                               ? [
@@ -2975,173 +3351,250 @@ class _DigitalPassCardState extends State<DigitalPassCard>
                           hasBg ? widget.bloodType.trim() : 'Unset',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: hasBg ? 18 : 13,
+                            fontSize: hasBg ? 19 : 13,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 14),
 
-                  // Middle: Donor Name, Verification, Streak Pill & ID
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  // 2. Donor Name, Nickname & Verification Badge Row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
                               widget.donorName.isNotEmpty
                                   ? widget.donorName.toUpperCase()
-                                  : "COMMUNITY MEMBER",
+                                  : 'COMMUNITY MEMBER',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 17.5,
+                                fontSize: 18,
                                 fontWeight: FontWeight.w900,
-                                letterSpacing: 0.5,
+                                letterSpacing: 0.4,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          if (widget.isVerified) ...[
-                            const SizedBox(width: 6),
-                            const Icon(
-                              Icons.verified_rounded,
-                              color: Color(0xFF34D399),
-                              size: 18,
-                            ),
-                          ],
-                          if (widget.isPhoneVerified) ...[
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.phonelink_ring_rounded,
-                              color: Color(0xFF38BDF8),
-                              size: 15,
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Flexible(
-                            child: GestureDetector(
-                              onTap: () {
-                                if (widget.donorId.isNotEmpty) {
-                                  Clipboard.setData(
-                                      ClipboardData(text: widget.donorId));
-                                  HapticFeedback.selectionClick();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content:
-                                          Text('Donor ID copied to clipboard'),
-                                      duration: Duration(seconds: 1),
-                                    ),
-                                  );
-                                }
-                              },
-                              child: Text(
-                                "ID: ${widget.donorId.isNotEmpty ? widget.donorId : 'UNASSIGNED'}",
+                            if (safeNickname.isNotEmpty)
+                              Text(
+                                'Preferred Name: $safeNickname',
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.72),
-                                  fontSize: 10.5,
-                                  fontFamily: 'monospace',
-                                  letterSpacing: 0.9,
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: (widget.isEligible &&
-                                      widget.daysUntilEligible <= 0)
-                                  ? const Color(0xFF10B981)
-                                      .withValues(alpha: 0.25)
-                                  : const Color(0xFFF59E0B)
-                                      .withValues(alpha: 0.25),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: (widget.isEligible &&
-                                        widget.daysUntilEligible <= 0)
-                                    ? const Color(0xFF34D399)
-                                    : const Color(0xFFFBBF24),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              (widget.isEligible &&
-                                      widget.daysUntilEligible <= 0)
-                                  ? '● READY'
-                                  : '⏳ ${widget.daysUntilEligible}d REST',
-                              style: TextStyle(
-                                color: (widget.isEligible &&
-                                        widget.daysUntilEligible <= 0)
-                                    ? const Color(0xFF6EE7B7)
-                                    : const Color(0xFFFDE68A),
-                                fontSize: 8.5,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _localStreakFrozen
-                                  ? const Color(0xFF0EA5E9)
-                                      .withValues(alpha: 0.28)
-                                  : Colors.white.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              _localStreakFrozen
-                                  ? '❄️ FROZEN'
-                                  : '🔥 $effectiveStreak STREAK',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 8.5,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
 
-                  // Bottom Stats: Donations, Lives Saved, Points & Tap to Flip hint
+                  // 3. Status Chips Row: Verified by RedCellNet / Verification Pending, Readiness, Streak
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: widget.isVerified
+                              ? const Color(0xFF10B981).withValues(alpha: 0.26)
+                              : const Color(0xFFF59E0B).withValues(alpha: 0.24),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: widget.isVerified
+                                ? const Color(0xFF34D399)
+                                : const Color(0xFFFBBF24),
+                            width: 0.9,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              widget.isVerified
+                                  ? Icons.verified_rounded
+                                  : Icons.hourglass_top_rounded,
+                              size: 12,
+                              color: widget.isVerified
+                                  ? const Color(0xFF6EE7B7)
+                                  : const Color(0xFFFDE68A),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _verificationBadgeText,
+                              style: TextStyle(
+                                color: widget.isVerified
+                                    ? const Color(0xFF6EE7B7)
+                                    : const Color(0xFFFDE68A),
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: (widget.isEligible &&
+                                  widget.daysUntilEligible <= 0)
+                              ? const Color(0xFF10B981).withValues(alpha: 0.22)
+                              : const Color(0xFFF59E0B).withValues(alpha: 0.22),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          (widget.isEligible && widget.daysUntilEligible <= 0)
+                              ? '● READY TO DONATE'
+                              : '⏳ ${widget.daysUntilEligible}d RECOVERY',
+                          style: TextStyle(
+                            color: (widget.isEligible &&
+                                    widget.daysUntilEligible <= 0)
+                                ? const Color(0xFF6EE7B7)
+                                : const Color(0xFFFDE68A),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: _localStreakFrozen
+                              ? const Color(0xFF0EA5E9).withValues(alpha: 0.28)
+                              : Colors.white.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _localStreakFrozen
+                              ? '❄️ FROZEN'
+                              : '🔥 $effectiveStreak STREAK',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 4. All-in-One Donor Details Grid Inside the Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.24),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.12),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildCardDetailCell(
+                                icon: Icons.fingerprint_rounded,
+                                label: 'DONOR ID',
+                                value: widget.donorId.isNotEmpty
+                                    ? widget.donorId
+                                    : 'UNASSIGNED',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildCardDetailCell(
+                                icon: Icons.location_on_outlined,
+                                label: 'CITY',
+                                value: safeCity,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildCardDetailCell(
+                                icon: Icons.phone_outlined,
+                                label: 'PHONE',
+                                value: safePhone,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildCardDetailCell(
+                                icon: Icons.email_outlined,
+                                label: 'EMAIL',
+                                value: safeEmail,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildCardDetailCell(
+                                icon: Icons.history_rounded,
+                                label: 'LAST DONATION',
+                                value: safeLastDonation,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildCardDetailCell(
+                                icon: Icons.event_available_rounded,
+                                label: 'NEXT ELIGIBLE',
+                                value: safeNextEligible,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 5. Bottom Stats: Donations, Lives Saved, Points & Flip Hint
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Flexible(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
                           children: [
                             _buildStatBadge(
-                                "DONATIONS", "${widget.totalDonations}"),
-                            const SizedBox(width: 8),
+                                'DONATIONS', '${widget.totalDonations}'),
                             _buildStatBadge(
-                                "LIVES SAVED", "up to ${widget.livesSaved}"),
-                            if (widget.points > 0) ...[
-                              const SizedBox(width: 8),
-                              _buildStatBadge("IMPACT", "${widget.points} pts"),
-                            ],
+                                'LIVES SAVED', 'up to ${widget.livesSaved}'),
+                            _buildStatBadge('IMPACT', '${widget.points} pts'),
                           ],
                         ),
                       ),
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            "TAP TO FLIP",
+                            'FLIP FOR QR',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.65),
+                              color: Colors.white.withValues(alpha: 0.75),
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.5,
@@ -3151,7 +3604,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
                           Icon(
                             Icons.flip_rounded,
                             size: 13,
-                            color: Colors.white.withValues(alpha: 0.65),
+                            color: Colors.white.withValues(alpha: 0.75),
                           ),
                         ],
                       ),
@@ -3166,11 +3619,53 @@ class _DigitalPassCardState extends State<DigitalPassCard>
     );
   }
 
+  Widget _buildCardDetailCell({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(icon, size: 13, color: const Color(0xFFFDA4AF)),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.58),
+                  fontSize: 7.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBackFace() {
     return Container(
       width: double.infinity,
-      height: 238,
-      padding: const EdgeInsets.all(18),
+      constraints: const BoxConstraints(minHeight: 336),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -3204,7 +3699,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
             children: [
               const Flexible(
                 child: Text(
-                  "MEDICAL & EMERGENCY CREDENTIALS",
+                  'MEDICAL & EMERGENCY CREDENTIALS',
                   style: TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 9.5,
@@ -3218,27 +3713,27 @@ class _DigitalPassCardState extends State<DigitalPassCard>
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildBackTabPill(0, 'QR & Info'),
+                  _buildBackTabPill(0, 'QR & ICE'),
                   const SizedBox(width: 4),
                   _buildBackTabPill(1, 'Match'),
                   const SizedBox(width: 4),
-                  _buildBackTabPill(2, 'Perks'),
+                  _buildBackTabPill(2, 'Referral'),
                 ],
               ),
             ],
           ),
+          const SizedBox(height: 12),
 
           // Dynamic Back Body based on selected sub-tab
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: _backSubTab == 0
-                  ? _buildBackQrAndMedicalTab()
-                  : _backSubTab == 1
-                      ? _buildBackCompatibilityTab()
-                      : _buildBackPerksTab(),
-            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: _backSubTab == 0
+                ? _buildBackQrAndMedicalTab()
+                : _backSubTab == 1
+                    ? _buildBackCompatibilityTab()
+                    : _buildBackPerksTab(),
           ),
+          const SizedBox(height: 12),
 
           // Footer: Verification Status & Flip Back
           Row(
@@ -3247,15 +3742,15 @@ class _DigitalPassCardState extends State<DigitalPassCard>
               Flexible(
                 child: Text(
                   widget.isVerified
-                      ? "VERIFIED BY REDCELLNET STAFF"
-                      : "SELF-REPORTED • HOSPITAL CROSS-MATCH REQUIRED",
+                      ? '✓ VERIFIED BY REDCELLNET'
+                      : '⏳ VERIFICATION PENDING • HOSPITAL CROSS-MATCH REQUIRED',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: widget.isVerified
                         ? const Color(0xFF34D399)
                         : const Color(0xFFFCD34D),
-                    fontSize: 8.5,
+                    fontSize: 9,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -3263,9 +3758,9 @@ class _DigitalPassCardState extends State<DigitalPassCard>
               Row(
                 children: [
                   Text(
-                    "FLIP BACK",
+                    'FLIP TO FRONT',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.55),
+                      color: Colors.white.withValues(alpha: 0.65),
                       fontSize: 9.5,
                       fontWeight: FontWeight.w700,
                     ),
@@ -3274,7 +3769,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
                   Icon(
                     Icons.flip_rounded,
                     size: 14,
-                    color: Colors.white.withValues(alpha: 0.55),
+                    color: Colors.white.withValues(alpha: 0.65),
                   ),
                 ],
               ),
@@ -3320,46 +3815,63 @@ class _DigitalPassCardState extends State<DigitalPassCard>
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildBackInfoItem(
-                "LAST DONATION",
-                widget.lastDonationDate.isNotEmpty
-                    ? widget.lastDonationDate
-                    : "No donations logged",
-              ),
-              _buildBackInfoItem(
-                "NEXT ELIGIBILITY",
-                widget.nextEligibleDate.isNotEmpty
-                    ? widget.nextEligibleDate
-                    : "Eligible Now",
-              ),
-              _buildBackInfoItem(
-                "EMERGENCY CONTACT",
+                'EMERGENCY ICE CONTACT',
                 widget.emergencyContact.isNotEmpty
                     ? widget.emergencyContact
-                    : "Not specified",
+                    : 'Not specified (Tap Edit ICE below)',
+              ),
+              const SizedBox(height: 10),
+              _buildBackInfoItem(
+                'MEDICAL / ALLERGY NOTES',
+                (widget.medicalNotes ?? '').trim().isNotEmpty
+                    ? widget.medicalNotes!.trim()
+                    : 'No allergies or conditions recorded',
+              ),
+              const SizedBox(height: 10),
+              _buildBackInfoItem(
+                'LAST DONATION & NEXT ELIGIBLE',
+                '${widget.lastDonationDate.isNotEmpty ? widget.lastDonationDate : "None"}  •  ${widget.nextEligibleDate.isNotEmpty ? widget.nextEligibleDate : "Eligible Now"}',
+              ),
+              const SizedBox(height: 10),
+              _buildBackInfoItem(
+                'PERSONAL INVITE CODE',
+                '$_effectiveReferralCode (${widget.referralCount} joined)',
               ),
             ],
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         GestureDetector(
           onTap: _openFullscreenQrModal,
-          child: Container(
-            width: 80,
-            height: 80,
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: QrImageView(
-              data: _qrPayload,
-              version: QrVersions.auto,
-              padding: EdgeInsets.zero,
-              backgroundColor: Colors.white,
-            ),
+          child: Column(
+            children: [
+              Container(
+                width: 98,
+                height: 98,
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: QrImageView(
+                  data: _qrPayload,
+                  version: QrVersions.auto,
+                  padding: EdgeInsets.zero,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'TAP TO ENLARGE',
+                style: TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 7.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -3372,27 +3884,31 @@ class _DigitalPassCardState extends State<DigitalPassCard>
     final receiveFrom = BloodCompatibility.canReceiveFrom(bg);
 
     if (bg.isEmpty || donateTo.isEmpty) {
-      return const Center(
-        child: Text(
-          'Set your blood group in Profile to view instant RBC & Plasma compatibility rules on your pass.',
-          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
-          textAlign: TextAlign.center,
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: Text(
+            'Set your blood group in Profile to view instant RBC & Plasma compatibility rules on your pass.',
+            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         _buildBackInfoItem(
           'CAN DONATE RED CELLS TO (${donateTo.length} GROUPS)',
           donateTo.join('  •  '),
         ),
+        const SizedBox(height: 10),
         _buildBackInfoItem(
           'CAN RECEIVE RED CELLS FROM (${receiveFrom.length} GROUPS)',
           receiveFrom.join('  •  '),
         ),
+        const SizedBox(height: 10),
         _buildBackInfoItem(
           'CLINICAL ROLE',
           bg == 'O-'
@@ -3408,23 +3924,22 @@ class _DigitalPassCardState extends State<DigitalPassCard>
   Widget _buildBackPerksTab() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         _buildBackInfoItem(
           'PERSONAL INVITE & REFERRAL CODE',
-          '$_effectiveReferralCode  (Tap dock below to copy & share)',
+          '$_effectiveReferralCode  •  ${widget.referralCount} Donors Invited (+${widget.referralCount * 50} pts)',
         ),
+        const SizedBox(height: 10),
         _buildBackInfoItem(
           'STREAK PROTECTION STATUS',
           _localStreakFrozen
               ? '❄️ Medical Freeze Active (${widget.streakFreezeReason ?? "Protected"})'
               : '🔥 Active Streak Tracking (Medical Freeze Available)',
         ),
+        const SizedBox(height: 10),
         _buildBackInfoItem(
-          'MEDICAL NOTES / ALLERGIES',
-          (widget.medicalNotes != null && widget.medicalNotes!.trim().isNotEmpty)
-              ? widget.medicalNotes!.trim()
-              : 'None recorded on pass',
+          'VERIFICATION STATUS',
+          _verificationBadgeText,
         ),
       ],
     );
@@ -3434,7 +3949,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -3444,7 +3959,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
             label,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.65),
-              fontSize: 8,
+              fontSize: 7.5,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -3452,7 +3967,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
             value,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 12.5,
+              fontSize: 12,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -3475,7 +3990,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 1),
+        const SizedBox(height: 2),
         Text(
           value,
           style: const TextStyle(
@@ -3483,7 +3998,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
             fontSize: 11.5,
             fontWeight: FontWeight.w700,
           ),
-          maxLines: 1,
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
       ],
@@ -3970,8 +4485,10 @@ Future<void> showCommunityLeaderboardSheet(
                         ),
                         ElevatedButton(
                           onPressed: () {
-                            Share.share(
-                              '🩸 Join me on RedCellNet LifePulse — Bangladesh\'s Emergency Blood Donor Network! Use my referral code: $referralCode',
+                            Navigator.pop(ctx);
+                            showReferralProgramSheet(
+                              context,
+                              referralCode: referralCode,
                             );
                           },
                           style: ElevatedButton.styleFrom(
@@ -3980,7 +4497,7 @@ Future<void> showCommunityLeaderboardSheet(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 8),
                           ),
-                          child: const Text('Share'),
+                          child: const Text('Referral Hub'),
                         ),
                       ],
                     ),
@@ -3995,91 +4512,195 @@ Future<void> showCommunityLeaderboardSheet(
   );
 }
 
-/// Shows the Blood Camp Calendar & 1-Tap .ics / Google Calendar Export Sheet.
-Future<void> showBloodCampCalendarSheet(BuildContext context) async {
-  final settings = AppSettingsService();
-  final camps = settings.getUpcomingBloodCamps();
+/// Interactive Referral & Invite Program Sheet (Share Code + Redeem Friend's Code).
+Future<void> showReferralProgramSheet(
+  BuildContext context, {
+  String? referralCode,
+  int referralCount = 0,
+  String? referredBy,
+}) async {
+  final service = UserProfileService();
+  final codeController = TextEditingController();
+  bool isSubmitting = false;
+  String? statusMsg;
+  bool isSuccess = false;
+  final effectiveCode = (referralCode != null && referralCode.trim().isNotEmpty)
+      ? referralCode.trim()
+      : AppSettingsService.generateReferralCode(
+          userId: SupabaseConfig.client.auth.currentUser?.id,
+        );
 
   await showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(ctx).size.height * 0.82,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceOf(ctx),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 42,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.borderOf(ctx),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSheetState) {
+        return Container(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 14,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(Icons.event_available_rounded,
-                    color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Upcoming Blood Drives & Camps',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimaryOf(ctx),
-                      ),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceOf(ctx),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.borderOf(ctx),
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    Text(
-                      'Export .ics or add directly to Google / Apple Calendar',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondaryOf(ctx),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.card_giftcard_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Lifesaver Referral Program',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textPrimaryOf(ctx),
+                            ),
+                          ),
+                          Text(
+                            'Invite donors (+50 pts) or redeem a friend\'s code (+25 pts)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondaryOf(ctx),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView.separated(
-              itemCount: camps.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (ctx, i) {
-                final camp = camps[i];
-                final title = camp['title'].toString();
-                final organizer = camp['organizer'].toString();
-                final location = camp['location'].toString();
-                final desc = camp['description'].toString();
-                final start = DateTime.tryParse(camp['start_time'].toString()) ??
-                    DateTime.now().add(const Duration(days: 3));
-                final end = DateTime.tryParse(camp['end_time'].toString()) ??
-                    start.add(const Duration(hours: 5));
-
-                return Container(
+                const SizedBox(height: 16),
+                // Your Invite Code Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.passCrimsonGradient,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'YOUR PERSONAL INVITE CODE',
+                            style: TextStyle(
+                              color: Color(0xFFFDA4AF),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '$referralCount Donors Invited (+${referralCount * 50} pts)',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          SelectableText(
+                            effectiveCode,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.5,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                tooltip: 'Copy Code',
+                                onPressed: () {
+                                  Clipboard.setData(
+                                      ClipboardData(text: effectiveCode));
+                                  HapticFeedback.selectionClick();
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    SnackBar(
+                                      content:
+                                          Text('Copied $effectiveCode!'),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.copy_rounded,
+                                    color: Colors.white, size: 20),
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Share.share(
+                                    '🩸 Join me on RedCellNet — Bangladesh\'s Emergency Blood Donor Network! Enter my referral code $effectiveCode when signing up (or in Profile -> Referral) to earn +25 bonus Impact Points!',
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: AppColors.primary,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 8),
+                                ),
+                                icon:
+                                    const Icon(Icons.share_rounded, size: 16),
+                                label: const Text('Share'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                // Redeem a Friend's Code
+                Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: AppColors.mutedOf(ctx),
@@ -4089,138 +4710,544 @@ Future<void> showBloodCampCalendarSheet(BuildContext context) async {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              '${start.day}/${start.month}/${start.year}',
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11.5,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              organizer,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textSecondaryOf(ctx),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
                       Text(
-                        title,
+                        'Have a Friend\'s Referral Code?',
                         style: TextStyle(
-                          fontSize: 15,
                           fontWeight: FontWeight.w800,
+                          fontSize: 14,
                           color: AppColors.textPrimaryOf(ctx),
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on_outlined,
-                              size: 14, color: AppColors.primary),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              location,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondaryOf(ctx),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
                       Text(
-                        desc,
+                        (referredBy != null && referredBy.trim().isNotEmpty)
+                            ? '✓ You have already redeemed referral code: $referredBy'
+                            : 'Enter a fellow donor\'s referral code below to claim +25 Impact Points for yourself and award +50 Points to them!',
                         style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.textSecondaryOf(ctx),
-                          height: 1.35,
+                          color: (referredBy != null &&
+                                  referredBy.trim().isNotEmpty)
+                              ? AppColors.vitalEmerald
+                              : AppColors.textSecondaryOf(ctx),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
-                                final icsContent =
-                                    settings.generateBloodCampIcs(
-                                  title: title,
-                                  location: location,
-                                  description: desc,
-                                  startTime: start,
-                                  endTime: end,
-                                );
-                                final xFile = XFile.fromData(
-                                  Uint8List.fromList(utf8.encode(icsContent)),
-                                  mimeType: 'text/calendar',
-                                  name: '${camp['id']}.ics',
-                                );
-                                await Share.shareXFiles(
-                                  [xFile],
-                                  text: '📅 $title at $location',
-                                );
-                              },
-                              icon: const Icon(Icons.download_rounded, size: 16),
-                              label: const Text('Export .ics',
-                                  style: TextStyle(fontSize: 12)),
+                      if (referredBy == null || referredBy.trim().isEmpty) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: codeController,
+                                textCapitalization:
+                                    TextCapitalization.characters,
+                                decoration: const InputDecoration(
+                                  hintText: 'e.g. RCN-O+-A1B2',
+                                  prefixIcon: Icon(
+                                      Icons.confirmation_number_outlined,
+                                      size: 18),
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                final gcalUrl = settings.buildGoogleCalendarUrl(
-                                  title: title,
-                                  location: location,
-                                  description: desc,
-                                  startTime: start,
-                                  endTime: end,
-                                );
-                                final uri = Uri.parse(gcalUrl);
-                                await launchUrl(uri,
-                                    mode: LaunchMode.externalApplication);
-                              },
-                              icon: const Icon(Icons.calendar_month_rounded,
-                                  size: 16),
-                              label: const Text('Google Cal',
-                                  style: TextStyle(fontSize: 12)),
+                            const SizedBox(width: 10),
+                            ElevatedButton(
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () async {
+                                      final input =
+                                          codeController.text.trim();
+                                      if (input.isEmpty) return;
+                                      setSheetState(() {
+                                        isSubmitting = true;
+                                        statusMsg = null;
+                                      });
+                                      try {
+                                        final res = await service
+                                            .applyReferralCode(input);
+                                        final ok = res['success'] == true;
+                                        setSheetState(() {
+                                          isSubmitting = false;
+                                          isSuccess = ok;
+                                          statusMsg =
+                                              (res['message'] ?? '').toString();
+                                        });
+                                        if (ok) {
+                                          codeController.clear();
+                                        }
+                                      } catch (e) {
+                                        setSheetState(() {
+                                          isSubmitting = false;
+                                          isSuccess = false;
+                                          statusMsg = e
+                                              .toString()
+                                              .replaceAll('Exception: ', '');
+                                        });
+                                      }
+                                    },
+                              child: isSubmitting
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white),
+                                    )
+                                  : const Text('Redeem +25'),
                             ),
+                          ],
+                        ),
+                      ],
+                      if (statusMsg != null && statusMsg!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          statusMsg!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isSuccess
+                                ? AppColors.vitalEmerald
+                                : AppColors.critical,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ],
                   ),
-                );
-              },
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        );
+      },
+    ),
+  );
+}
+
+/// Shows the Blood Camp Calendar & 1-Tap .ics / Google Calendar Export Sheet.
+Future<void> showBloodCampCalendarSheet(BuildContext context) async {
+  final settings = AppSettingsService();
+  List<Map<String, dynamic>> camps = List<Map<String, dynamic>>.from(
+    settings.getUpcomingBloodCamps(),
+  );
+  try {
+    final rows = await SupabaseConfig.client
+        .from('blood_camps')
+        .select()
+        .eq('is_active', true)
+        .order('created_at', ascending: false);
+    final liveCamps = List<Map<String, dynamic>>.from(rows);
+    if (liveCamps.isNotEmpty) {
+      camps = [...liveCamps, ...camps];
+    }
+  } catch (_) {}
+
+  if (!context.mounted) return;
+  String selectedCity = 'All';
+  String searchQuery = '';
+
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSheetState) {
+        final cities = <String>{
+          'All',
+          'Dhaka',
+          'Chattogram',
+          'Sylhet',
+          'Rajshahi',
+          'Khulna',
+        };
+        for (final c in camps) {
+          final cityStr = (c['city'] ?? '').toString().trim();
+          if (cityStr.isNotEmpty) cities.add(cityStr);
+        }
+
+        final filteredCamps = camps.where((c) {
+          final title = (c['title'] ?? '').toString().toLowerCase();
+          final org = (c['organizer'] ?? '').toString().toLowerCase();
+          final loc =
+              '${c['location'] ?? ''} ${c['venue'] ?? ''} ${c['city'] ?? ''}'
+                  .toLowerCase();
+          if (selectedCity != 'All' &&
+              !loc.contains(selectedCity.toLowerCase())) {
+            return false;
+          }
+          if (searchQuery.trim().isNotEmpty) {
+            final q = searchQuery.trim().toLowerCase();
+            return title.contains(q) || org.contains(q) || loc.contains(q);
+          }
+          return true;
+        }).toList();
+
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.86,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceOf(ctx),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.borderOf(ctx),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.event_available_rounded,
+                        color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Upcoming Blood Drives & Camps',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.textPrimaryOf(ctx),
+                          ),
+                        ),
+                        Text(
+                          'Filter by city, call organizers, or sync to calendar',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryOf(ctx),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${filteredCamps.length} Drives',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                onChanged: (v) => setSheetState(() => searchQuery = v),
+                decoration: InputDecoration(
+                  hintText: 'Search blood camp, university, or organizer...',
+                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: cities.map((city) {
+                    final active = selectedCity == city;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(city == 'All' ? 'All Cities' : city),
+                        selected: active,
+                        selectedColor: AppColors.primary,
+                        labelStyle: TextStyle(
+                          color: active
+                              ? Colors.white
+                              : AppColors.textPrimaryOf(ctx),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                        onSelected: (_) =>
+                            setSheetState(() => selectedCity = city),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: filteredCamps.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No blood camps match "$selectedCity" right now.',
+                          style: TextStyle(
+                            color: AppColors.textSecondaryOf(ctx),
+                            fontSize: 13,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: filteredCamps.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (ctx, i) {
+                          final camp = filteredCamps[i];
+                          final title = (camp['title'] ?? 'Blood Donation Camp')
+                              .toString();
+                          final organizer =
+                              (camp['organizer'] ?? 'RedCellNet').toString();
+                          final rawVenue =
+                              (camp['venue'] ?? '').toString().trim();
+                          final rawLocation =
+                              (camp['location'] ?? '').toString().trim();
+                          final city = (camp['city'] ?? '').toString().trim();
+                          final location = rawLocation.isNotEmpty
+                              ? rawLocation
+                              : [
+                                  if (rawVenue.isNotEmpty) rawVenue,
+                                  if (city.isNotEmpty) city
+                                ].join(', ');
+                          final rawDesc =
+                              (camp['description'] ?? '').toString().trim();
+                          final phone =
+                              (camp['contact_phone'] ?? '').toString().trim();
+                          final desc = rawDesc.isNotEmpty
+                              ? rawDesc
+                              : 'Voluntary community blood drive organized by $organizer.';
+                          final startStr =
+                              (camp['start_time'] ?? camp['event_date'] ?? '')
+                                  .toString();
+                          final start = DateTime.tryParse(startStr) ??
+                              DateTime.now().add(const Duration(days: 3));
+                          final end = DateTime.tryParse(
+                                  (camp['end_time'] ?? '').toString()) ??
+                              start.add(const Duration(hours: 5));
+
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.mutedOf(ctx),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: AppColors.borderOf(ctx)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary
+                                            .withValues(alpha: 0.14),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                              Icons.calendar_today_rounded,
+                                              size: 12,
+                                              color: AppColors.primary),
+                                          const SizedBox(width: 5),
+                                          Text(
+                                            '${start.day}/${start.month}/${start.year}',
+                                            style: const TextStyle(
+                                              color: AppColors.primary,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 11.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.vitalEmerald
+                                            .withValues(alpha: 0.14),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        'Walk-Ins Welcome',
+                                        style: TextStyle(
+                                          color: AppColors.vitalEmerald,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 10.5,
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      tooltip: 'Share Blood Camp',
+                                      icon: const Icon(Icons.share_rounded,
+                                          size: 17),
+                                      onPressed: () {
+                                        Share.share(
+                                          '🩸 Upcoming Blood Donation Drive: $title\n📍 Location: $location\n📅 Date: ${start.day}/${start.month}/${start.year}\nOrganized by $organizer via RedCellNet',
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.textPrimaryOf(ctx),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Organizer: $organizer',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.secondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.location_on_outlined,
+                                        size: 14, color: AppColors.primary),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        location,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondaryOf(ctx),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  desc,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondaryOf(ctx),
+                                    height: 1.35,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    if (phone.isNotEmpty) ...[
+                                      OutlinedButton.icon(
+                                        onPressed: () async {
+                                          final uri =
+                                              Uri.parse('tel:$phone');
+                                          await launchUrl(uri);
+                                        },
+                                        icon: const Icon(Icons.call_rounded,
+                                            size: 15),
+                                        label: const Text('Call',
+                                            style: TextStyle(fontSize: 12)),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () async {
+                                          final icsContent =
+                                              settings.generateBloodCampIcs(
+                                            title: title,
+                                            location: location,
+                                            description: desc,
+                                            startTime: start,
+                                            endTime: end,
+                                          );
+                                          final xFile = XFile.fromData(
+                                            Uint8List.fromList(
+                                                utf8.encode(icsContent)),
+                                            mimeType: 'text/calendar',
+                                            name:
+                                                '${camp['id'] ?? "camp"}.ics',
+                                          );
+                                          await Share.shareXFiles(
+                                            [xFile],
+                                            text: '📅 $title at $location',
+                                          );
+                                        },
+                                        icon: const Icon(
+                                            Icons.download_rounded,
+                                            size: 15),
+                                        label: const Text('.ics',
+                                            style: TextStyle(fontSize: 12)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: () async {
+                                          final gcalUrl = settings
+                                              .buildGoogleCalendarUrl(
+                                            title: title,
+                                            location: location,
+                                            description: desc,
+                                            startTime: start,
+                                            endTime: end,
+                                          );
+                                          final uri = Uri.parse(gcalUrl);
+                                          await launchUrl(uri,
+                                              mode: LaunchMode
+                                                  .externalApplication);
+                                        },
+                                        icon: const Icon(
+                                            Icons.calendar_month_rounded,
+                                            size: 15),
+                                        label: const Text('Google Cal',
+                                            style: TextStyle(fontSize: 12)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
     ),
   );
 }
 
 /// Shows the Personal Donation & Hemoglobin Health Journal Sheet with PDF Export.
+/// Designed with a responsive 2-tab layout and a sticky bottom "Save Wellness Entry"
+/// button that never gets pushed off-screen.
 Future<void> showHealthJournalSheet(
   BuildContext context, {
   String? donorName,
@@ -4233,53 +5260,163 @@ Future<void> showHealthJournalSheet(
   final notesController = TextEditingController();
   bool ironSupplement = false;
   int feelingRating = 5;
+  int activeTab = 0; // 0 = Log Vitals, 1 = History & PDF
+
+  const moodLabels = <int, String>{
+    1: 'Exhausted',
+    2: 'Low Energy',
+    3: 'Normal',
+    4: 'Strong',
+    5: 'Peak Vitality',
+  };
 
   await showModalBottomSheet(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     backgroundColor: Colors.transparent,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setSheetState) {
-        return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.88,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceOf(ctx),
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 14,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: FutureBuilder<List<Map<String, dynamic>>>(
-            future: settings.getHealthJournalEntries(),
-            builder: (ctx, snap) {
-              final entries = snap.data ?? const [];
-              return SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 42,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.borderOf(ctx),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+        final mediaQuery = MediaQuery.of(ctx);
+        final keyboardInset = mediaQuery.viewInsets.bottom;
+
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: keyboardInset),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: mediaQuery.size.height * 0.88,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceOf(ctx),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: settings.getHealthJournalEntries(),
+              builder: (ctx, snap) {
+                final entries = snap.data ?? const [];
+                double? latestHb;
+                String latestBp = '-';
+                String latestWeight = '-';
+                for (final e in entries) {
+                  latestHb ??= double.tryParse(
+                      (e['hemoglobin_g_dl'] ?? '').toString().trim());
+                  if (latestBp == '-' &&
+                      (e['blood_pressure'] ?? '').toString().trim().isNotEmpty) {
+                    latestBp = e['blood_pressure'].toString().trim();
+                  }
+                  if (latestWeight == '-' &&
+                      (e['weight_kg'] ?? '').toString().trim().isNotEmpty) {
+                    latestWeight = '${e['weight_kg']} kg';
+                  }
+                }
+                final double? typedHb =
+                    double.tryParse(hbController.text.trim());
+                final double? displayHb = typedHb ?? latestHb;
+                final bool hbEligible = displayHb == null || displayHb >= 12.5;
+                final double hbProgress = displayHb == null
+                    ? 0.75
+                    : ((displayHb - 8.0) / 10.0).clamp(0.05, 1.0);
+
+                Future<void> exportPdfReport() async {
+                  if (entries.isEmpty) return;
+                  final doc = pw.Document();
+                  doc.addPage(
+                    pw.Page(
+                      pageFormat: PdfPageFormat.a4,
+                      build: (pw.Context pCtx) => pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'RedCellNet — Personal Donor Health & Hemoglobin Log',
+                            style: pw.TextStyle(
+                              fontSize: 18,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                          pw.SizedBox(height: 6),
+                          pw.Text(
+                              'Donor: ${donorName ?? "Community Donor"} | Blood Group: ${bloodType ?? "Unset"}'),
+                          pw.Divider(),
+                          ...entries.map(
+                            (e) => pw.Padding(
+                              padding:
+                                  const pw.EdgeInsets.symmetric(vertical: 6),
+                              child: pw.Text(
+                                '• Date: ${(e['recorded_at'] ?? '').toString().split('T').first} | Hb: ${e['hemoglobin_g_dl'] ?? '-'} g/dL | BP: ${e['blood_pressure'] ?? '-'} | Weight: ${e['weight_kg'] ?? '-'} kg | Vitality: ${e['feeling_rating'] ?? 5}/5 | Notes: ${e['notes'] ?? ''}',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Row(
+                  );
+                  await Printing.layoutPdf(onLayout: (_) async => doc.save());
+                }
+
+                Future<void> saveEntry() async {
+                  if (hbController.text.trim().isEmpty &&
+                      bpController.text.trim().isEmpty &&
+                      weightController.text.trim().isEmpty &&
+                      notesController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Please enter at least one vital sign or note before saving.'),
+                        backgroundColor: AppColors.warning,
+                      ),
+                    );
+                    return;
+                  }
+                  FocusScope.of(ctx).unfocus();
+                  await settings.addHealthJournalEntry({
+                    'hemoglobin_g_dl': hbController.text.trim(),
+                    'blood_pressure': bpController.text.trim(),
+                    'weight_kg': weightController.text.trim(),
+                    'feeling_rating': feelingRating,
+                    'iron_supplement': ironSupplement,
+                    'notes': notesController.text.trim(),
+                  });
+                  hbController.clear();
+                  bpController.clear();
+                  weightController.clear();
+                  notesController.clear();
+                  setSheetState(() {
+                    activeTab = 1;
+                  });
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content:
+                            Text('Wellness & Hemoglobin entry saved to log!'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  }
+                }
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // --- Top Drag Handle & Header ---
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 16, 10),
+                      child: Column(
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 42,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: AppColors.borderOf(ctx),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(10),
@@ -4295,265 +5432,733 @@ Future<void> showHealthJournalSheet(
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       'Hemoglobin & Wellness Journal',
                                       style: TextStyle(
-                                        fontSize: 17,
+                                        fontSize: 16.5,
                                         fontWeight: FontWeight.w900,
                                         color: AppColors.textPrimaryOf(ctx),
                                       ),
                                     ),
                                     Text(
-                                      'Track Hb (g/dL), BP, weight & iron recovery',
+                                      'WHO Hb gauge (>= 12.5 g/dL), BP, weight & iron log',
                                       style: TextStyle(
-                                        fontSize: 12,
-                                        color:
-                                            AppColors.textSecondaryOf(ctx),
+                                        fontSize: 11.5,
+                                        color: AppColors.textSecondaryOf(ctx),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        if (entries.isNotEmpty)
-                          IconButton(
-                            tooltip: 'Export PDF Health Log',
-                            onPressed: () async {
-                              final doc = pw.Document();
-                              doc.addPage(
-                                pw.Page(
-                                  pageFormat: PdfPageFormat.a4,
-                                  build: (pw.Context pCtx) => pw.Column(
-                                    crossAxisAlignment:
-                                        pw.CrossAxisAlignment.start,
-                                    children: [
-                                      pw.Text(
-                                        'RedCellNet — Personal Donor Health & Hemoglobin Log',
-                                        style: pw.TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: pw.FontWeight.bold,
-                                        ),
-                                      ),
-                                      pw.SizedBox(height: 6),
-                                      pw.Text(
-                                          'Donor: ${donorName ?? "Community Donor"} | Blood Group: ${bloodType ?? "Unset"}'),
-                                      pw.Divider(),
-                                      ...entries.map(
-                                        (e) => pw.Padding(
-                                          padding: const pw.EdgeInsets.symmetric(
-                                              vertical: 6),
-                                          child: pw.Text(
-                                            '• Date: ${(e['recorded_at'] ?? '').toString().split('T').first} | Hb: ${e['hemoglobin_g_dl'] ?? '-'} g/dL | BP: ${e['blood_pressure'] ?? '-'} | Weight: ${e['weight_kg'] ?? '-'} kg | Notes: ${e['notes'] ?? ''}',
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                              if (entries.isNotEmpty)
+                                IconButton(
+                                  tooltip: 'Export PDF Health Log',
+                                  onPressed: exportPdfReport,
+                                  icon: const Icon(Icons.picture_as_pdf_rounded,
+                                      color: AppColors.primary),
                                 ),
-                              );
-                              await Printing.layoutPdf(
-                                  onLayout: (_) async => doc.save());
-                            },
-                            icon: const Icon(Icons.picture_as_pdf_rounded,
-                                color: AppColors.primary),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.mutedOf(ctx),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.borderOf(ctx)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Log New Vitals Check',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w800, fontSize: 13.5),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: hbController,
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                          decimal: true),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Hb (g/dL)',
-                                    hintText: 'e.g. 14.2',
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: TextField(
-                                  controller: bpController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'BP (mmHg)',
-                                    hintText: '120/80',
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: TextField(
-                                  controller: weightController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Weight (kg)',
-                                    hintText: '68',
-                                  ),
-                                ),
+                              IconButton(
+                                tooltip: 'Close',
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                icon: const Icon(Icons.close_rounded, size: 20),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          TextField(
-                            controller: notesController,
-                            decoration: const InputDecoration(
-                              labelText: 'Health / Post-Donation Notes',
-                              hintText:
-                                  'Hydrated well, feeling energetic, or deferral note...',
+                          const SizedBox(height: 12),
+                          // --- Segmented 2-Tab Switcher ---
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: AppColors.mutedOf(ctx),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: AppColors.borderOf(ctx)),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
-                            children: [
-                              FilterChip(
-                                label: const Text('Taking Iron Supplement'),
-                                selected: ironSupplement,
-                                onSelected: (v) => setSheetState(
-                                    () => ironSupplement = v),
-                              ),
-                              ElevatedButton.icon(
-                                onPressed: () async {
-                                  if (hbController.text.trim().isEmpty &&
-                                      bpController.text.trim().isEmpty &&
-                                      notesController.text.trim().isEmpty) {
-                                    return;
-                                  }
-                                  await settings.addHealthJournalEntry({
-                                    'hemoglobin_g_dl':
-                                        hbController.text.trim(),
-                                    'blood_pressure':
-                                        bpController.text.trim(),
-                                    'weight_kg':
-                                        weightController.text.trim(),
-                                    'feeling_rating': feelingRating,
-                                    'iron_supplement': ironSupplement,
-                                    'notes': notesController.text.trim(),
-                                  });
-                                  hbController.clear();
-                                  bpController.clear();
-                                  weightController.clear();
-                                  notesController.clear();
-                                  setSheetState(() {});
-                                },
-                                icon: const Icon(Icons.add_rounded, size: 18),
-                                label: const Text('Save Entry'),
-                              ),
-                            ],
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(10),
+                                    onTap: () =>
+                                        setSheetState(() => activeTab = 0),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 9),
+                                      decoration: BoxDecoration(
+                                        color: activeTab == 0
+                                            ? AppColors.primary
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.edit_note_rounded,
+                                            size: 16,
+                                            color: activeTab == 0
+                                                ? Colors.white
+                                                : AppColors.textSecondaryOf(
+                                                    ctx),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Log Vitals',
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: activeTab == 0
+                                                  ? Colors.white
+                                                  : AppColors.textSecondaryOf(
+                                                      ctx),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(10),
+                                    onTap: () =>
+                                        setSheetState(() => activeTab = 1),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 9),
+                                      decoration: BoxDecoration(
+                                        color: activeTab == 1
+                                            ? AppColors.primary
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.history_edu_rounded,
+                                            size: 16,
+                                            color: activeTab == 1
+                                                ? Colors.white
+                                                : AppColors.textSecondaryOf(
+                                                    ctx),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'History (${entries.length})',
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: activeTab == 1
+                                                  ? Colors.white
+                                                  : AppColors.textSecondaryOf(
+                                                      ctx),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Recent Vitals Log (${entries.length})',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        color: AppColors.textPrimaryOf(ctx),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (entries.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Text(
-                          'No health journal entries yet. WHO recommends Hemoglobin >= 12.5 g/dL (women) and >= 13.0 g/dL (men) before whole blood donation.',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: AppColors.textSecondaryOf(ctx),
-                          ),
-                        ),
-                      )
-                    else
-                      ...entries.take(8).map((e) {
-                        final id = e['id']?.toString() ?? '';
-                        final dateStr = (e['recorded_at'] ?? '')
-                            .toString()
-                            .split('T')
-                            .first;
-                        final hb = (e['hemoglobin_g_dl'] ?? '').toString();
-                        final bp = (e['blood_pressure'] ?? '').toString();
-                        final wt = (e['weight_kg'] ?? '').toString();
-                        final notes = (e['notes'] ?? '').toString();
-                        final iron = e['iron_supplement'] == true;
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.mutedOf(ctx),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '$dateStr  ${hb.isNotEmpty ? "• Hb: $hb g/dL" : ""}  ${bp.isNotEmpty ? "• BP: $bp" : ""}  ${wt.isNotEmpty ? "• ${wt}kg" : ""}',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 12.5,
-                                        color: AppColors.textPrimaryOf(ctx),
+                    // --- Scrollable Middle Content ---
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                        child: activeTab == 0
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Compact WHO Hemoglobin Readiness Banner
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          (hbEligible
+                                                  ? AppColors.vitalEmerald
+                                                  : AppColors.warning)
+                                              .withValues(alpha: 0.14),
+                                          AppColors.mutedOf(ctx),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: (hbEligible
+                                                ? AppColors.vitalEmerald
+                                                : AppColors.warning)
+                                            .withValues(alpha: 0.4),
                                       ),
                                     ),
-                                    if (notes.isNotEmpty || iron)
-                                      Text(
-                                        '${iron ? "[Iron Supplement] " : ""}$notes',
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                displayHb != null
+                                                    ? 'Hemoglobin: ${displayHb.toStringAsFixed(1)} g/dL'
+                                                    : 'WHO Target: >= 12.5 g/dL',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 13.5,
+                                                  color:
+                                                      AppColors.textPrimaryOf(
+                                                          ctx),
+                                                ),
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: (hbEligible
+                                                        ? AppColors.vitalEmerald
+                                                        : AppColors.warning)
+                                                    .withValues(alpha: 0.2),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                displayHb == null
+                                                    ? 'Enter Vitals Below'
+                                                    : (hbEligible
+                                                        ? 'WHO Optimal'
+                                                        : 'Low Hb (<12.5)'),
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: hbEligible
+                                                      ? AppColors.vitalEmerald
+                                                      : AppColors.warning,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                          child: LinearProgressIndicator(
+                                            value: hbProgress,
+                                            minHeight: 7,
+                                            backgroundColor:
+                                                AppColors.borderOf(ctx)
+                                                    .withValues(alpha: 0.5),
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                              hbEligible
+                                                  ? AppColors.vitalEmerald
+                                                  : AppColors.warning,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 12,
+                                          runSpacing: 4,
+                                          children: [
+                                            Text(
+                                              'Last BP: $latestBp',
+                                              style: TextStyle(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w700,
+                                                color:
+                                                    AppColors.textSecondaryOf(
+                                                        ctx),
+                                              ),
+                                            ),
+                                            Text(
+                                              'Last Weight: $latestWeight (Min 50 kg)',
+                                              style: TextStyle(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w700,
+                                                color:
+                                                    AppColors.textSecondaryOf(
+                                                        ctx),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // --- Spacious Clinical Vitals Inputs ---
+                                  Text(
+                                    '1. CLINICAL VITALS',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 0.6,
+                                      color: AppColors.textMutedOf(ctx),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: hbController,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    onChanged: (_) => setSheetState(() {}),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimaryOf(ctx),
+                                    ),
+                                    decoration: InputDecoration(
+                                      labelText: 'Hemoglobin Level (g/dL)',
+                                      hintText: 'e.g. 14.2 (WHO min: 12.5)',
+                                      prefixIcon: const Icon(
+                                          Icons.water_drop_rounded,
+                                          color: AppColors.primary,
+                                          size: 20),
+                                      filled: true,
+                                      fillColor: AppColors.mutedOf(ctx),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  LayoutBuilder(
+                                    builder: (ctx, box) {
+                                      final isNarrow = box.maxWidth < 310;
+                                      final bpField = TextField(
+                                        controller: bpController,
                                         style: TextStyle(
-                                          fontSize: 11.5,
-                                          color: AppColors.textSecondaryOf(
-                                              ctx),
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimaryOf(ctx),
+                                        ),
+                                        decoration: InputDecoration(
+                                          labelText: 'Blood Pressure (mmHg)',
+                                          hintText: 'e.g. 120/80',
+                                          prefixIcon: const Icon(
+                                              Icons.favorite_border_rounded,
+                                              color: AppColors.secondary,
+                                              size: 20),
+                                          filled: true,
+                                          fillColor: AppColors.mutedOf(ctx),
+                                        ),
+                                      );
+                                      final wtField = TextField(
+                                        controller: weightController,
+                                        keyboardType: TextInputType.number,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimaryOf(ctx),
+                                        ),
+                                        decoration: InputDecoration(
+                                          labelText: 'Body Weight (kg)',
+                                          hintText: 'e.g. 68',
+                                          prefixIcon: const Icon(
+                                              Icons.monitor_weight_outlined,
+                                              color: AppColors.accent,
+                                              size: 20),
+                                          filled: true,
+                                          fillColor: AppColors.mutedOf(ctx),
+                                        ),
+                                      );
+                                      if (isNarrow) {
+                                        return Column(
+                                          children: [
+                                            bpField,
+                                            const SizedBox(height: 10),
+                                            wtField,
+                                          ],
+                                        );
+                                      }
+                                      return Row(
+                                        children: [
+                                          Expanded(child: bpField),
+                                          const SizedBox(width: 10),
+                                          Expanded(child: wtField),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // --- Vitality & Recovery Rating ---
+                                  Text(
+                                    '2. HOW ARE YOU FEELING TODAY?',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 0.6,
+                                      color: AppColors.textMutedOf(ctx),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: moodLabels.entries.map((entry) {
+                                      final selected =
+                                          feelingRating == entry.key;
+                                      return ChoiceChip(
+                                        label: Text(
+                                            '${entry.key} • ${entry.value}'),
+                                        selected: selected,
+                                        selectedColor: AppColors.vitalEmerald,
+                                        backgroundColor: AppColors.mutedOf(ctx),
+                                        labelStyle: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: selected
+                                              ? Colors.white
+                                              : AppColors.textPrimaryOf(ctx),
+                                        ),
+                                        onSelected: (_) => setSheetState(
+                                            () => feelingRating = entry.key),
+                                      );
+                                    }).toList(),
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // --- Iron Supplement Toggle Card ---
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.mutedOf(ctx),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                          color: AppColors.borderOf(ctx)),
+                                    ),
+                                    child: SwitchListTile(
+                                      dense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 14, vertical: 2),
+                                      secondary: const Icon(
+                                        Icons.medication_liquid_rounded,
+                                        color: AppColors.vitalEmerald,
+                                      ),
+                                      title: Text(
+                                        'Taking Iron / Folic Acid Supplement',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13,
+                                          color: AppColors.textPrimaryOf(ctx),
                                         ),
                                       ),
-                                  ],
+                                      subtitle: Text(
+                                        'Helps replenish red blood cells after donation',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: AppColors.textSecondaryOf(ctx),
+                                        ),
+                                      ),
+                                      value: ironSupplement,
+                                      activeThumbColor: AppColors.vitalEmerald,
+                                      onChanged: (v) => setSheetState(
+                                          () => ironSupplement = v),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  // --- Notes Field ---
+                                  TextField(
+                                    controller: notesController,
+                                    maxLines: 2,
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      color: AppColors.textPrimaryOf(ctx),
+                                    ),
+                                    decoration: InputDecoration(
+                                      labelText:
+                                          'Post-Donation / Wellness Notes (Optional)',
+                                      hintText:
+                                          'Hydrated well, iron-rich meal, feeling energetic...',
+                                      prefixIcon: const Icon(
+                                          Icons.notes_rounded,
+                                          size: 20),
+                                      filled: true,
+                                      fillColor: AppColors.mutedOf(ctx),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (entries.isEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.mutedOf(ctx),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                            color: AppColors.borderOf(ctx)),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          const Icon(
+                                            Icons.monitor_heart_outlined,
+                                            size: 36,
+                                            color: AppColors.vitalEmerald,
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Text(
+                                            'No Vitals Logged Yet',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 15,
+                                              color:
+                                                  AppColors.textPrimaryOf(ctx),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'WHO recommends Hemoglobin >= 12.5 g/dL (women) and >= 13.0 g/dL (men) before whole blood donation. Switch to "Log Vitals" to record your first check.',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              height: 1.4,
+                                              color: AppColors.textSecondaryOf(
+                                                  ctx),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  else
+                                    ...entries.map((e) {
+                                      final id = e['id']?.toString() ?? '';
+                                      final dateStr = (e['recorded_at'] ?? '')
+                                          .toString()
+                                          .split('T')
+                                          .first;
+                                      final hb = (e['hemoglobin_g_dl'] ?? '')
+                                          .toString();
+                                      final bp = (e['blood_pressure'] ?? '')
+                                          .toString();
+                                      final wt =
+                                          (e['weight_kg'] ?? '').toString();
+                                      final notes =
+                                          (e['notes'] ?? '').toString();
+                                      final iron =
+                                          e['iron_supplement'] == true;
+                                      final mood = e['feeling_rating'] ?? 5;
+
+                                      return Container(
+                                        margin:
+                                            const EdgeInsets.only(bottom: 10),
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.mutedOf(ctx),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
+                                          border: Border.all(
+                                              color: AppColors.borderOf(ctx)),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(9),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.vitalEmerald
+                                                    .withValues(alpha: 0.14),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: const Icon(
+                                                Icons.favorite_rounded,
+                                                color: AppColors.vitalEmerald,
+                                                size: 18,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    dateStr,
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w900,
+                                                      fontSize: 12,
+                                                      color: AppColors
+                                                          .textSecondaryOf(ctx),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Wrap(
+                                                    spacing: 8,
+                                                    runSpacing: 4,
+                                                    children: [
+                                                      if (hb.isNotEmpty)
+                                                        Text(
+                                                          'Hb: $hb g/dL',
+                                                          style: TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.w800,
+                                                            fontSize: 13,
+                                                            color: AppColors
+                                                                .textPrimaryOf(
+                                                                    ctx),
+                                                          ),
+                                                        ),
+                                                      if (bp.isNotEmpty)
+                                                        Text(
+                                                          'BP: $bp',
+                                                          style: TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            fontSize: 12.5,
+                                                            color: AppColors
+                                                                .textPrimaryOf(
+                                                                    ctx),
+                                                          ),
+                                                        ),
+                                                      if (wt.isNotEmpty)
+                                                        Text(
+                                                          'Weight: $wt kg',
+                                                          style: TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            fontSize: 12.5,
+                                                            color: AppColors
+                                                                .textPrimaryOf(
+                                                                    ctx),
+                                                          ),
+                                                        ),
+                                                      Text(
+                                                        'Vitality: $mood/5',
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          fontSize: 12.5,
+                                                          color: AppColors
+                                                              .vitalEmerald,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  if (notes.isNotEmpty ||
+                                                      iron) ...[
+                                                    const SizedBox(height: 5),
+                                                    Text(
+                                                      '${iron ? "💊 Iron Supplement • " : ""}$notes',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: AppColors
+                                                            .textSecondaryOf(
+                                                                ctx),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                            IconButton(
+                                              tooltip: 'Delete entry',
+                                              icon: const Icon(
+                                                  Icons.delete_outline_rounded,
+                                                  color: AppColors.critical,
+                                                  size: 19),
+                                              onPressed: () async {
+                                                await settings
+                                                    .deleteHealthJournalEntry(
+                                                        id);
+                                                setSheetState(() {});
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                ],
+                              ),
+                      ),
+                    ),
+
+                    // --- Sticky Bottom Action Footer (Always Visible on Screen) ---
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceOf(ctx),
+                        border: Border(
+                          top: BorderSide(color: AppColors.borderOf(ctx)),
+                        ),
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: activeTab == 0
+                              ? ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.vitalEmerald,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  onPressed: saveEntry,
+                                  icon: const Icon(
+                                      Icons.check_circle_outline_rounded,
+                                      size: 20),
+                                  label: const Text(
+                                    'Save Wellness Entry',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                )
+                              : OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  onPressed: entries.isNotEmpty
+                                      ? exportPdfReport
+                                      : () => setSheetState(() => activeTab = 0),
+                                  icon: Icon(
+                                    entries.isNotEmpty
+                                        ? Icons.picture_as_pdf_rounded
+                                        : Icons.add_rounded,
+                                    size: 19,
+                                  ),
+                                  label: Text(
+                                    entries.isNotEmpty
+                                        ? 'Export PDF Clinical Report'
+                                        : 'Log First Vital Entry',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded,
-                                    size: 18),
-                                onPressed: () async {
-                                  await settings.deleteHealthJournalEntry(id);
-                                  setSheetState(() {});
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
+                        ),
+                      ),
+                    ),
                   ],
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },

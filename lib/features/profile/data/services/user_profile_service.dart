@@ -46,8 +46,10 @@ class UserProfileService {
     m['available_until'] ??= m['availableUntil'];
     m['notificationsPausedUntil'] ??= m['notifications_paused_until'];
     m['notifications_paused_until'] ??= m['notificationsPausedUntil'];
-    m['notificationPreferences'] ??= m['notification_preferences'] ?? <String, dynamic>{};
-    m['notification_preferences'] ??= m['notificationPreferences'] ?? <String, dynamic>{};
+    m['notificationPreferences'] ??=
+        m['notification_preferences'] ?? <String, dynamic>{};
+    m['notification_preferences'] ??=
+        m['notificationPreferences'] ?? <String, dynamic>{};
     m['privacySettings'] ??= m['privacy_settings'] ?? <String, dynamic>{};
     m['privacy_settings'] ??= m['privacySettings'] ?? <String, dynamic>{};
     m['bookmarkedRequestIds'] ??= m['bookmarked_request_ids'] ?? <dynamic>[];
@@ -111,17 +113,32 @@ class UserProfileService {
     m['medical_notes'] ??= m['medicalNotes'];
     m['streakCount'] ??= m['streak_count'] ?? 0;
     m['streak_count'] ??= m['streakCount'] ?? 0;
-    m['streakFrozen'] ??= m['streak_frozen'] ?? AppSettingsService().isStreakFrozen;
+    m['streakFrozen'] ??=
+        m['streak_frozen'] ?? AppSettingsService().isStreakFrozen;
     m['streak_frozen'] ??= m['streakFrozen'] ?? false;
-    m['streakFreezeReason'] ??= m['streak_freeze_reason'] ?? AppSettingsService().streakFreezeReason;
+    m['streakFreezeReason'] ??=
+        m['streak_freeze_reason'] ?? AppSettingsService().streakFreezeReason;
     m['streak_freeze_reason'] ??= m['streakFreezeReason'];
     m['referralCode'] ??= m['referral_code'] ??
         AppSettingsService.generateReferralCode(
           userId: m['id']?.toString(),
-          fullName: m['full_name']?.toString(),
+          fullName: (m['name'] ?? m['full_name'])?.toString(),
           bloodGroup: m['blood_type']?.toString(),
         );
     m['referral_code'] ??= m['referralCode'];
+    m['referredBy'] ??= m['referred_by'];
+    m['referred_by'] ??= m['referredBy'];
+    m['referralCount'] ??= m['referral_count'] ?? 0;
+    m['referral_count'] ??= m['referralCount'] ?? 0;
+    m['nickname'] ??= m['nick_name'] ?? '';
+    m['deletionRequested'] ??= m['deletion_requested'] ?? false;
+    m['deletion_requested'] ??= m['deletionRequested'] ?? false;
+    m['deletionRequestedAt'] ??= m['deletion_requested_at'];
+    m['deletion_requested_at'] ??= m['deletionRequestedAt'];
+    m['deletionRequestReason'] ??= m['deletion_request_reason'] ?? '';
+    m['deletion_request_reason'] ??= m['deletionRequestReason'] ?? '';
+    m['deletionRequestStatus'] ??= m['deletion_request_status'] ?? 'none';
+    m['deletion_request_status'] ??= m['deletionRequestStatus'] ?? 'none';
     AppSettingsService().cacheUserProfile(m);
     return m;
   }
@@ -205,8 +222,9 @@ class UserProfileService {
           out['extracted_blood_type'] = value;
           break;
         case 'verificationRequestedAt':
-          out['verification_requested_at'] =
-              value is String ? value : DateTime.now().toUtc().toIso8601String();
+          out['verification_requested_at'] = value is String
+              ? value
+              : DateTime.now().toUtc().toIso8601String();
           break;
         case 'donationHistory':
           out['donation_history'] = value;
@@ -258,6 +276,7 @@ class UserProfileService {
     required String uid,
     required String email,
     String? name,
+    String? nickname,
     String? bloodType,
     String? phoneNumber,
     String? locationCity,
@@ -266,7 +285,7 @@ class UserProfileService {
     try {
       final existing = await supabase
           .from('profiles')
-          .select('id, name, blood_type, phone_number, location_city')
+          .select('id, name, nickname, blood_type, phone_number, location_city')
           .eq('id', uid)
           .maybeSingle();
 
@@ -275,6 +294,8 @@ class UserProfileService {
           'id': uid,
           'email': email,
           'name': (name ?? '').trim(),
+          if (nickname != null && nickname.trim().isNotEmpty)
+            'nickname': nickname.trim(),
           if (bloodType != null && bloodType.trim().isNotEmpty)
             'blood_type': bloodType.trim(),
           if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
@@ -298,6 +319,12 @@ class UserProfileService {
             (existing['name'] == null ||
                 existing['name'].toString().trim().isEmpty)) {
           patch['name'] = name.trim();
+        }
+        if (nickname != null &&
+            nickname.trim().isNotEmpty &&
+            (existing['nickname'] == null ||
+                existing['nickname'].toString().trim().isEmpty)) {
+          patch['nickname'] = nickname.trim();
         }
         if (bloodType != null &&
             bloodType.trim().isNotEmpty &&
@@ -339,11 +366,8 @@ class UserProfileService {
 
     // 1. Initial REST fetch
     try {
-      final res = await supabase
-          .from('profiles')
-          .select()
-          .eq('id', uid)
-          .maybeSingle();
+      final res =
+          await supabase.from('profiles').select().eq('id', uid).maybeSingle();
 
       if (res != null) {
         yield ProfileSnapshot(_normalizeProfile(res), id: uid);
@@ -392,11 +416,8 @@ class UserProfileService {
       return ProfileSnapshot(null, id: uid);
     }
     try {
-      final res = await supabase
-          .from('profiles')
-          .select()
-          .eq('id', uid)
-          .maybeSingle();
+      final res =
+          await supabase.from('profiles').select().eq('id', uid).maybeSingle();
 
       if (res == null) {
         return ProfileSnapshot(null, id: uid);
@@ -566,7 +587,8 @@ class UserProfileService {
     if (SupabaseConfig.isInitialized) {
       try {
         final res = await supabase.rpc('get_community_leaderboard', params: {
-          'p_city': (city != null && city.trim().isNotEmpty) ? city.trim() : null,
+          'p_city':
+              (city != null && city.trim().isNotEmpty) ? city.trim() : null,
         });
         if (res is List && res.isNotEmpty) {
           return res
@@ -660,6 +682,46 @@ class UserProfileService {
   /// Self-service account deletion via hardened PostgreSQL RPC.
   Future<void> deleteOwnAccount() async {
     await supabase.rpc('delete_own_account');
+  }
+
+  /// Applies a friend's referral code to award +25 pts to caller and +50 pts to referrer.
+  Future<Map<String, dynamic>> applyReferralCode(String code) async {
+    final res = await supabase.rpc('apply_referral_code', params: {
+      'p_code': code.trim().toUpperCase(),
+    });
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'success': true};
+  }
+
+  /// Deletes a stored verification document from the `verification-docs` bucket to keep storage free.
+  Future<void> deleteVerificationDocument(String? storagePath) async {
+    if (storagePath == null || storagePath.trim().isEmpty) return;
+    if (storagePath.startsWith('http://') ||
+        storagePath.startsWith('https://')) {
+      return;
+    }
+    try {
+      await supabase.storage
+          .from('verification-docs')
+          .remove([storagePath.trim()]);
+    } catch (e) {
+      debugPrint('deleteVerificationDocument notice: $e');
+    }
+  }
+
+  /// Admin/Staff RPC to either Archive (soft delete) or Permanently Hard Delete a user account.
+  Future<Map<String, dynamic>> adminDeleteOrArchiveUser({
+    required String targetUserId,
+    required String deleteMode, // 'archive' or 'hard_delete'
+    String reason = 'Administrative action',
+  }) async {
+    final res = await supabase.rpc('admin_delete_or_archive_user', params: {
+      'target_user_id': targetUserId,
+      'delete_mode': deleteMode,
+      'reason': reason,
+    });
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'success': true, 'mode': deleteMode};
   }
 
   // --- Staff & Administrative RPCs (Zero Insecure Direct-Table Fallbacks) ---
@@ -787,5 +849,36 @@ class UserProfileService {
         'p_target_id': id,
       });
     } catch (_) {}
+  }
+
+  /// Submits a user account deletion request (requires Admin/Staff approval).
+  Future<Map<String, dynamic>> requestAccountDeletion({
+    String reason = 'User requested permanent account deletion',
+  }) async {
+    final res = await supabase.rpc('request_account_deletion', params: {
+      'p_reason': reason,
+    });
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'success': true, 'status': 'pending_approval'};
+  }
+
+  /// Cancels a pending user account deletion request before Admin/Staff approval.
+  Future<void> cancelAccountDeletionRequest() async {
+    await supabase.rpc('cancel_account_deletion_request');
+  }
+
+  /// Admin/Staff action to approve (hard delete), archive, or reject a user's deletion request.
+  Future<Map<String, dynamic>> adminResolveDeletionRequest({
+    required String targetUserId,
+    required String decision,
+    String adminNote = '',
+  }) async {
+    final res = await supabase.rpc('admin_resolve_deletion_request', params: {
+      'target_user_id': targetUserId,
+      'decision': decision,
+      'admin_note': adminNote,
+    });
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'success': true};
   }
 }

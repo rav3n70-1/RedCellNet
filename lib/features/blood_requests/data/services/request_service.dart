@@ -121,6 +121,25 @@ class RequestService {
       o['status'] = o['status']?.toString() ?? 'pending';
       o['donationVerified'] = o['donationVerified'] == true;
       o['certificateId'] = o['certificateId']?.toString();
+      o['locationTrackingStatus'] =
+          o['locationTrackingStatus']?.toString() ?? 'none';
+      o['locationTrackingRequestedAt'] =
+          o['locationTrackingRequestedAt']?.toString();
+      o['locationTrackingConsentedAt'] =
+          o['locationTrackingConsentedAt']?.toString();
+      o['donorLatitude'] = (o['donorLatitude'] is num)
+          ? (o['donorLatitude'] as num).toDouble()
+          : double.tryParse(o['donorLatitude']?.toString() ?? '');
+      o['donorLongitude'] = (o['donorLongitude'] is num)
+          ? (o['donorLongitude'] as num).toDouble()
+          : double.tryParse(o['donorLongitude']?.toString() ?? '');
+      o['donorLocationUpdatedAt'] = o['donorLocationUpdatedAt']?.toString();
+      o['donorEtaMinutes'] = (o['donorEtaMinutes'] is num)
+          ? (o['donorEtaMinutes'] as num).toInt()
+          : int.tryParse(o['donorEtaMinutes']?.toString() ?? '');
+      o['donorDistanceKm'] = (o['donorDistanceKm'] is num)
+          ? (o['donorDistanceKm'] as num).toDouble()
+          : double.tryParse(o['donorDistanceKm']?.toString() ?? '');
       return o;
     }).toList();
 
@@ -929,6 +948,35 @@ class RequestService {
       return Map<String, dynamic>.from(res);
     }
     return {'success': true};
+  }
+
+  /// Mutual-consent live donor location tracking after an offer is accepted.
+  /// Supported actions: 'request_tracking', 'accept_tracking', 'update_location', 'decline_tracking', 'stop_tracking'.
+  Future<Map<String, dynamic>> manageOfferLocationTracking({
+    required String requestId,
+    required String offerId,
+    required String action,
+    double? latitude,
+    double? longitude,
+    int? etaMinutes,
+    double? distanceKm,
+  }) async {
+    final res = await supabase.rpc(
+      'manage_offer_location_tracking',
+      params: {
+        'p_request_id': requestId,
+        'p_offer_id': offerId,
+        'p_action': action,
+        'p_latitude': latitude,
+        'p_longitude': longitude,
+        'p_eta_minutes': etaMinutes,
+        'p_distance_km': distanceKm,
+      },
+    );
+    if (res is Map) {
+      return Map<String, dynamic>.from(res);
+    }
+    return {'success': true, 'action': action};
   }
 
   Future<void> deleteBloodRequest(String requestId) async {

@@ -14,7 +14,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('1. Component-Aware Blood Compatibility & Medical Safety', () {
-    test('Returns false whenever donor or recipient blood group is null, empty, or Unset', () {
+    test(
+        'Returns false whenever donor or recipient blood group is null, empty, or Unset',
+        () {
       expect(
         BloodCompatibility.isCompatible(
           donorBloodType: null,
@@ -72,7 +74,9 @@ void main() {
       );
     });
 
-    test('Plasma follows inverted ABO antibody compatibility (AB universal plasma donor)', () {
+    test(
+        'Plasma follows inverted ABO antibody compatibility (AB universal plasma donor)',
+        () {
       // AB plasma has neither anti-A nor anti-B -> compatible with O, A, B, AB recipients
       expect(
         BloodCompatibility.canDonateTo('AB+', componentType: 'Plasma').length,
@@ -91,7 +95,9 @@ void main() {
       expect(oPlasmaRecipients, isNot(contains('AB+')));
     });
 
-    test('Platelets enforce RhD alloimmunization protection for Rh-negative recipients', () {
+    test(
+        'Platelets enforce RhD alloimmunization protection for Rh-negative recipients',
+        () {
       expect(
         BloodCompatibility.isCompatible(
           donorBloodType: 'A+',
@@ -118,7 +124,9 @@ void main() {
       );
     });
 
-    test('Mandatory clinical cross-match & preliminary triage disclaimers are present', () {
+    test(
+        'Mandatory clinical cross-match & preliminary triage disclaimers are present',
+        () {
       expect(
         BloodCompatibility.medicalCrossMatchDisclaimer,
         contains('cross-matching'),
@@ -131,7 +139,9 @@ void main() {
   });
 
   group('2. OCR Blood Group Extraction from Lab Reports', () {
-    test('Extracts symbol-suffixed groups (O+, AB-, A+) without word-boundary failure', () {
+    test(
+        'Extracts symbol-suffixed groups (O+, AB-, A+) without word-boundary failure',
+        () {
       expect(
         BloodCompatibility.extractBloodTypeFromOcr(
           'DIAGNOSTIC LAB REPORT\nPatient Blood Group: O+\nVerified Pathologist',
@@ -170,7 +180,8 @@ void main() {
   });
 
   group('3. WHO 90-Day Donor Recovery Cooldown', () {
-    test('Enforces strict 90-day cooldown and computes exact remaining days', () {
+    test('Enforces strict 90-day cooldown and computes exact remaining days',
+        () {
       final now = DateTime.utc(2026, 11, 7, 12, 0);
       final recentDonation = now.subtract(const Duration(days: 30));
 
@@ -180,7 +191,8 @@ void main() {
       );
       expect(cooldown.isEligible, isFalse);
       expect(cooldown.daysRemaining, 60);
-      expect(cooldown.nextEligibleDate, recentDonation.add(const Duration(days: 90)));
+      expect(cooldown.nextEligibleDate,
+          recentDonation.add(const Duration(days: 90)));
 
       final completedCooldown = BloodCompatibility.checkEligibility(
         lastDonationDate: now.subtract(const Duration(days: 91)),
@@ -196,7 +208,9 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('Persists ThemeMode (system default), EN/BN translations, drafts, and bookmarks', () async {
+    test(
+        'Persists ThemeMode (system default), EN/BN translations, drafts, and bookmarks',
+        () async {
       final settings = AppSettingsService();
       await settings.init();
 
@@ -232,7 +246,9 @@ void main() {
   });
 
   group('5. DonationCenter Model Null-Safe Parsing', () {
-    test('Validates coordinate bounds and parses operational status & inventory', () {
+    test(
+        'Validates coordinate bounds and parses operational status & inventory',
+        () {
       final valid = DonationCenter.fromMap(
         {
           'name': 'DMCH Blood Bank',
@@ -313,7 +329,8 @@ void main() {
       );
     });
 
-    testWidgets('OnboardingPage renders in Bengali and Dark Mode without overflow',
+    testWidgets(
+        'OnboardingPage renders in Bengali and Dark Mode without overflow',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
       final settings = AppSettingsService();
@@ -345,7 +362,8 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('Donor streak preserves count when Medical Freeze is active', () async {
+    test('Donor streak preserves count when Medical Freeze is active',
+        () async {
       final settings = AppSettingsService();
       await settings.init();
 
@@ -375,7 +393,8 @@ void main() {
       );
     });
 
-    test('Offline emergency cache, health journal, .ics calendar & fuzzy search work',
+    test(
+        'Offline emergency cache, health journal, .ics calendar & fuzzy search work',
         () async {
       final settings = AppSettingsService();
       await settings.init();
@@ -420,7 +439,7 @@ void main() {
     });
 
     testWidgets(
-        'Upgraded DigitalPassCard renders Gold Guardian tier, Action Dock, and flips cleanly',
+        'Upgraded DigitalPassCard renders Verified by RedCellNet, Action Dock, and flips cleanly',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -448,10 +467,13 @@ void main() {
         ),
       );
 
-      expect(find.text('GOLD GUARDIAN'), findsOneWidget);
+      expect(find.text('REDCELLNET'), findsOneWidget);
+      expect(find.text('Verified by RedCellNet'), findsOneWidget);
       expect(find.text('O-'), findsOneWidget);
-      expect(find.text('Share PNG'), findsOneWidget);
+      expect(find.text('Export Card'), findsOneWidget);
       expect(find.text('Hospital QR'), findsOneWidget);
+      expect(find.text('Invite +50'), findsOneWidget);
+      expect(find.text('Pin Widget'), findsNothing);
       expect(find.byType(RedCellNetLogo), findsOneWidget);
     });
   });
