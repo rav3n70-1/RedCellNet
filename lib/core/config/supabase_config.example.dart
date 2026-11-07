@@ -1,18 +1,30 @@
-// lib/core/config/supabase_config.dart
+// lib/core/config/supabase_config.example.dart
+//
+// Copy this file to `lib/core/config/supabase_config.dart` for local builds,
+// OR pass credentials at compile time using:
+//   flutter run --dart-define-from-file=.env
+//   flutter build apk --dart-define-from-file=.env
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Configuration constants and client access for Supabase.
 class SupabaseConfig {
-  /// Supabase project URL
-  static const String url = 'https://gygaensofsguorvyqtag.supabase.co';
+  /// Supabase project URL (override via --dart-define=SUPABASE_URL=...)
+  static const String url = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'https://YOUR_PROJECT_REF.supabase.co',
+  );
 
-  /// Supabase legacy anon JWT key (works universally with REST and Realtime WebSockets)
-  static const String anonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5Z2FlbnNvZnNndW9ydnlxdGFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3NjM4NjEsImV4cCI6MjEwOTMzOTg2MX0.SkedU8g6t0Id9pjmlQb_OIfHnL7rb-N-C7BZAZAC3RU';
+  /// Supabase legacy anon JWT key (override via --dart-define=SUPABASE_ANON_KEY=...)
+  static const String anonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue: 'YOUR_SUPABASE_ANON_KEY',
+  );
 
-  /// Supabase publishable key (modern client key)
-  static const String publishableKey =
-      'sb_publishable_cG6gaMgVMH_1N2dnZQQnHg_Wrj9iC7U';
+  /// Supabase publishable key (override via --dart-define=SUPABASE_PUBLISHABLE_KEY=...)
+  static const String publishableKey = String.fromEnvironment(
+    'SUPABASE_PUBLISHABLE_KEY',
+    defaultValue: 'sb_publishable_YOUR_KEY',
+  );
 
   /// Deep link scheme for mobile OAuth / Magic link redirects
   static const String redirectScheme = 'io.supabase.redcellnet';
@@ -44,3 +56,4 @@ class SupabaseConfig {
 
 /// Global shortcut to Supabase client
 SupabaseClient get supabase => SupabaseConfig.client;
+

@@ -38,7 +38,8 @@ class _RequestsPageState extends State<RequestsPage>
 
   String? _filterBloodType;
   String? _filterUrgency;
-  String _myRequestsStatusFilter = 'All'; // 'All', 'Active', 'Fulfilled', 'Closed'
+  String _myRequestsStatusFilter =
+      'All'; // 'All', 'Active', 'Fulfilled', 'Closed'
   String _sortBy = 'newest'; // 'newest', 'urgency', 'distance'
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -109,18 +110,17 @@ class _RequestsPageState extends State<RequestsPage>
     final uid = _currentUserId;
     if (uid != null && uid.isNotEmpty) {
       unawaited(
-        _profileService
-            .updateUserProfile(uid, {
-              'bookmarkedRequestIds':
-                  settings.bookmarkedRequestsNotifier.value.toList(),
-            })
-            .catchError((e) => debugPrint('Bookmark sync notice: $e')),
+        _profileService.updateUserProfile(uid, {
+          'bookmarkedRequestIds':
+              settings.bookmarkedRequestsNotifier.value.toList(),
+        }).catchError((e) => debugPrint('Bookmark sync notice: $e')),
       );
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(added ? 'Saved to bookmarks.' : 'Removed from bookmarks.'),
+          content:
+              Text(added ? 'Saved to bookmarks.' : 'Removed from bookmarks.'),
           duration: const Duration(seconds: 1),
         ),
       );
@@ -843,7 +843,11 @@ class _RequestsPageState extends State<RequestsPage>
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+            itemCount: 4,
+            itemBuilder: (_, __) => const RequestCardSkeleton(),
+          );
         }
 
         List<AppDocSnapshot> requests = List.from(snapshot.data?.docs ?? []);
@@ -871,8 +875,8 @@ class _RequestsPageState extends State<RequestsPage>
 
         if (_filterBloodType != null && _filterBloodType != 'All') {
           requests = requests
-              .where((doc) =>
-                  doc.data()['requiredBloodType'] == _filterBloodType)
+              .where(
+                  (doc) => doc.data()['requiredBloodType'] == _filterBloodType)
               .toList();
         }
 
@@ -908,11 +912,19 @@ class _RequestsPageState extends State<RequestsPage>
                 (data['requiredBloodType'] ?? '').toString().toLowerCase();
             final patient =
                 (data['patientIdentifier'] ?? '').toString().toLowerCase();
-            return hospital.contains(_searchQuery) ||
+            final directMatch = hospital.contains(_searchQuery) ||
                 address.contains(_searchQuery) ||
                 city.contains(_searchQuery) ||
                 blood.contains(_searchQuery) ||
                 patient.contains(_searchQuery);
+            if (directMatch) return true;
+            // Typo-tolerant trigram fuzzy matching
+            return AppSettingsService.fuzzyMatchScore(hospital, _searchQuery) >=
+                    0.30 ||
+                AppSettingsService.fuzzyMatchScore(city, _searchQuery) >=
+                    0.34 ||
+                AppSettingsService.fuzzyMatchScore(address, _searchQuery) >=
+                    0.32;
           }).toList();
         }
 
@@ -954,8 +966,7 @@ class _RequestsPageState extends State<RequestsPage>
             final String city = requestData['city']?.toString() ?? '';
             final String urgency =
                 requestData['urgencyLevel']?.toString() ?? 'Medium';
-            final String status =
-                requestData['status']?.toString() ?? 'Open';
+            final String status = requestData['status']?.toString() ?? 'Open';
             final String componentType =
                 requestData['componentType']?.toString() ?? 'Whole Blood';
 
@@ -967,8 +978,7 @@ class _RequestsPageState extends State<RequestsPage>
             final int remainingUnits = (requestData['remainingUnits'] ??
                 (requiredUnits - acceptedUnits)) as int;
 
-            final Timestamp? createdAt =
-                requestData['createdAt'] as Timestamp?;
+            final Timestamp? createdAt = requestData['createdAt'] as Timestamp?;
             final String timeAgo = _formatTimestamp(createdAt);
             final double? distanceKm = _calculateDistanceKm(requestData);
             final bool isBookmarked = bookmarkedIds.contains(requestDoc.id);
@@ -978,10 +988,14 @@ class _RequestsPageState extends State<RequestsPage>
               decoration: BoxDecoration(
                 color: AppColors.cardBg(context),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: status == 'Partially Fulfilled'
-                      ? AppColors.warning.withValues(alpha: 0.4)
-                      : AppColors.borderOf(context),
+                border: Border(
+                  left: BorderSide(
+                    color: AppColors.urgencyColor(urgency),
+                    width: 4.5,
+                  ),
+                  top: BorderSide(color: AppColors.borderOf(context)),
+                  right: BorderSide(color: AppColors.borderOf(context)),
+                  bottom: BorderSide(color: AppColors.borderOf(context)),
                 ),
                 boxShadow: isDark ? [] : AppColors.cardShadow,
               ),
@@ -1004,10 +1018,13 @@ class _RequestsPageState extends State<RequestsPage>
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            BloodGroupBadge(
-                              bloodType: bloodType,
-                              size: 52,
-                              showGlow: true,
+                            Hero(
+                              tag: 'req_bg_${requestDoc.id}',
+                              child: BloodGroupBadge(
+                                bloodType: bloodType,
+                                size: 52,
+                                showGlow: true,
+                              ),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
@@ -1039,8 +1056,10 @@ class _RequestsPageState extends State<RequestsPage>
                                                 decoration: BoxDecoration(
                                                   color: isDark
                                                       ? AppColors.secondary
-                                                          .withValues(alpha: 0.2)
-                                                      : AppColors.secondaryLight,
+                                                          .withValues(
+                                                              alpha: 0.2)
+                                                      : AppColors
+                                                          .secondaryLight,
                                                   borderRadius:
                                                       BorderRadius.circular(6),
                                                 ),
@@ -1136,8 +1155,8 @@ class _RequestsPageState extends State<RequestsPage>
                                                           ? AppColors.warning
                                                               .withValues(
                                                                   alpha: 0.18)
-                                                          : AppColors
-                                                              .mutedOf(context)),
+                                                          : AppColors.mutedOf(
+                                                              context)),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
                                                 ),
@@ -1169,8 +1188,8 @@ class _RequestsPageState extends State<RequestsPage>
                                                   vertical: 2,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color:
-                                                      AppColors.mutedOf(context),
+                                                  color: AppColors.mutedOf(
+                                                      context),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
                                                 ),
@@ -1347,7 +1366,11 @@ class _RequestsPageState extends State<RequestsPage>
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+            itemCount: 4,
+            itemBuilder: (_, __) => const RequestCardSkeleton(),
+          );
         }
 
         final offers = snapshot.data?.docs ?? [];

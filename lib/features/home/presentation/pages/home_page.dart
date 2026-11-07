@@ -18,6 +18,7 @@ import 'package:red_cell_net_final/features/educational_content/presentation/pag
 import 'package:red_cell_net_final/features/nearby_map/presentation/pages/map_page.dart';
 import 'package:red_cell_net_final/features/profile/data/services/user_profile_service.dart';
 import 'package:red_cell_net_final/features/profile/presentation/pages/profile_page.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class HomePage extends StatefulWidget {
@@ -1651,6 +1652,13 @@ class _HomeContentState extends State<HomeContent> {
                               ),
                             ),
                             const SizedBox(width: 4),
+                            EligibilityCountdownRing(
+                              daysRemaining: eligibility.daysRemaining,
+                              bloodType: bloodType,
+                              nextEligibleDate: eligibility.nextEligibleDate,
+                              size: 42,
+                            ),
+                            const SizedBox(width: 2),
                             IconButton(
                               icon: const Icon(Icons.tune_rounded, size: 20),
                               color: isAvailable
@@ -1879,42 +1887,84 @@ class _HomeContentState extends State<HomeContent> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: _bloodGroups.map((group) {
-                    final isSelected =
-                        (_selectedBloodFilter == null && group == 'All') ||
-                            _selectedBloodFilter == group;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: ChoiceChip(
-                        label:
-                            Text(group == 'All' ? settings.tr('All') : group),
-                        selected: isSelected,
-                        selectedColor: AppColors.primary,
-                        backgroundColor: AppColors.cardBg(context),
-                        labelStyle: TextStyle(
-                          color: isSelected
-                              ? Colors.white
-                              : AppColors.textPrimaryOf(context),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.borderOf(context),
+                  children: [
+                    if ((_cachedUserBloodType ?? '').trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: ChoiceChip(
+                          avatar: Icon(
+                            Icons.verified_user_rounded,
+                            size: 15,
+                            color: _selectedBloodFilter == 'COMPATIBLE'
+                                ? Colors.white
+                                : AppColors.vitalEmerald,
                           ),
+                          label: Text(settings.tr('Compatible with Me')),
+                          selected: _selectedBloodFilter == 'COMPATIBLE',
+                          selectedColor: AppColors.vitalEmerald,
+                          backgroundColor: AppColors.cardBg(context),
+                          labelStyle: TextStyle(
+                            color: _selectedBloodFilter == 'COMPATIBLE'
+                                ? Colors.white
+                                : AppColors.textPrimaryOf(context),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12.5,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: _selectedBloodFilter == 'COMPATIBLE'
+                                  ? AppColors.vitalEmerald
+                                  : AppColors.vitalEmerald.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedBloodFilter =
+                                  _selectedBloodFilter == 'COMPATIBLE'
+                                      ? null
+                                      : 'COMPATIBLE';
+                            });
+                          },
                         ),
-                        onSelected: (_) {
-                          setState(() {
-                            _selectedBloodFilter =
-                                group == 'All' ? null : group;
-                          });
-                        },
                       ),
-                    );
-                  }).toList(),
+                    ..._bloodGroups.map((group) {
+                      final isSelected =
+                          (_selectedBloodFilter == null && group == 'All') ||
+                              _selectedBloodFilter == group;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: ChoiceChip(
+                          label:
+                              Text(group == 'All' ? settings.tr('All') : group),
+                          selected: isSelected,
+                          selectedColor: AppColors.primary,
+                          backgroundColor: AppColors.cardBg(context),
+                          labelStyle: TextStyle(
+                            color: isSelected
+                                ? Colors.white
+                                : AppColors.textPrimaryOf(context),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.borderOf(context),
+                            ),
+                          ),
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedBloodFilter =
+                                  group == 'All' ? null : group;
+                            });
+                          },
+                        ),
+                      );
+                    }),
+                  ],
                 ),
               ),
               const SizedBox(height: 20),
@@ -2001,6 +2051,58 @@ class _HomeContentState extends State<HomeContent> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildServiceTile(
+                      icon: Icons.emoji_events_rounded,
+                      iconColor: AppColors.imperialGold,
+                      bgColor: isDark
+                          ? AppColors.imperialGold.withValues(alpha: 0.18)
+                          : AppColors.goldLight,
+                      title: settings.tr('Top Heroes'),
+                      subtitle: 'City & national lifesavers',
+                      onTap: () => showCommunityLeaderboardSheet(
+                        context,
+                        userCity: _cachedUserCity,
+                        referralCode: AppSettingsService.generateReferralCode(
+                          userId: currentUserId,
+                          bloodGroup: _cachedUserBloodType,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildServiceTile(
+                      icon: Icons.event_available_rounded,
+                      iconColor: AppColors.accent,
+                      bgColor: isDark
+                          ? AppColors.accent.withValues(alpha: 0.18)
+                          : AppColors.accentLight,
+                      title: settings.tr('Blood Camps'),
+                      subtitle: 'Drives & .ics calendar sync',
+                      onTap: () => showBloodCampCalendarSheet(context),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildServiceTile(
+                icon: Icons.monitor_heart_rounded,
+                iconColor: AppColors.secondary,
+                bgColor: isDark
+                    ? AppColors.secondary.withValues(alpha: 0.18)
+                    : AppColors.secondaryLight,
+                title: settings.tr('Health Journal'),
+                subtitle:
+                    'Personal Hemoglobin (g/dL), BP, iron recovery log & PDF export',
+                onTap: () => showHealthJournalSheet(
+                  context,
+                  bloodType: _cachedUserBloodType,
+                ),
+              ),
               const SizedBox(height: 24),
             ],
           ),
@@ -2079,24 +2181,36 @@ class _HomeContentState extends State<HomeContent> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
-          return Container(
-            height: 100,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.cardBg(context),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.borderOf(context)),
-            ),
-            child: const CircularProgressIndicator(strokeWidth: 2.2),
+          return const Column(
+            children: [
+              RequestCardSkeleton(),
+              RequestCardSkeleton(),
+            ],
           );
         }
 
         final rawRequests = snapshot.data?.docs ?? [];
+        if (rawRequests.isNotEmpty) {
+          AppSettingsService().cacheEmergencyRequests(
+            rawRequests.map((d) => d.data()).toList(),
+          );
+        }
         final requests = rawRequests.where((doc) {
           if (_selectedBloodFilter != null && _selectedBloodFilter != 'All') {
             final data = doc.data();
-            return (data['requiredBloodType'] ?? data['required_blood_type']) ==
-                _selectedBloodFilter;
+            final reqBg = (data['requiredBloodType'] ??
+                    data['required_blood_type'] ??
+                    '')
+                .toString();
+            if (_selectedBloodFilter == 'COMPATIBLE') {
+              final donorBg = (_cachedUserBloodType ?? '').trim();
+              if (donorBg.isEmpty) return true;
+              return BloodCompatibility.isCompatible(
+                donorBloodType: donorBg,
+                recipientBloodType: reqBg,
+              );
+            }
+            return reqBg == _selectedBloodFilter;
           }
           return true;
         }).toList();
@@ -2147,7 +2261,6 @@ class _HomeContentState extends State<HomeContent> {
             final bloodType = data['requiredBloodType']?.toString() ?? '?';
             final hospital = data['hospitalName']?.toString() ?? 'Hospital';
             final address = data['hospitalAddress']?.toString() ?? '';
-            final status = data['status']?.toString() ?? 'Open';
             final requiredUnits =
                 (data['requiredUnits'] ?? data['unitsNeeded'] ?? 1) as int;
             final acceptedUnits = (data['acceptedUnits'] ?? 0) as int;
@@ -2183,10 +2296,14 @@ class _HomeContentState extends State<HomeContent> {
               decoration: BoxDecoration(
                 color: AppColors.cardBg(context),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: status == 'Partially Fulfilled'
-                      ? AppColors.warning.withValues(alpha: 0.4)
-                      : AppColors.borderOf(context),
+                border: Border(
+                  left: BorderSide(
+                    color: AppColors.urgencyColor(urgency),
+                    width: 4.5,
+                  ),
+                  top: BorderSide(color: AppColors.borderOf(context)),
+                  right: BorderSide(color: AppColors.borderOf(context)),
+                  bottom: BorderSide(color: AppColors.borderOf(context)),
                 ),
                 boxShadow:
                     AppColors.isDark(context) ? [] : AppColors.cardShadow,
@@ -2206,10 +2323,13 @@ class _HomeContentState extends State<HomeContent> {
                     padding: const EdgeInsets.all(14.0),
                     child: Row(
                       children: [
-                        BloodGroupBadge(
-                          bloodType: bloodType,
-                          size: 50,
-                          showGlow: true,
+                        Hero(
+                          tag: 'req_bg_${doc.id}',
+                          child: BloodGroupBadge(
+                            bloodType: bloodType,
+                            size: 50,
+                            showGlow: true,
+                          ),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -2317,7 +2437,29 @@ class _HomeContentState extends State<HomeContent> {
                             ],
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
+                        IconButton(
+                          tooltip: 'Share Rich Emergency Card (WhatsApp / SMS)',
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(
+                            Icons.share_rounded,
+                            size: 18,
+                            color: AppColors.primary,
+                          ),
+                          onPressed: () {
+                            final msg = AppSettingsService()
+                                .formatEmergencyShareMessage({
+                              ...data,
+                              'id': doc.id,
+                              'blood_type': bloodType,
+                              'hospital_name': hospital,
+                              'urgency': urgency,
+                              'units': requiredUnits,
+                              'units_fulfilled': acceptedUnits,
+                            });
+                            Share.share(msg);
+                          },
+                        ),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,

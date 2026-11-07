@@ -339,4 +339,120 @@ void main() {
       await settings.setLanguage('en');
     });
   });
+
+  group('7. Zero-Cost Features, Upgraded Flip Pass & Brand Logo', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('Donor streak preserves count when Medical Freeze is active', () async {
+      final settings = AppSettingsService();
+      await settings.init();
+
+      final oldHistory = [
+        {
+          'date': DateTime.now()
+              .subtract(const Duration(days: 260))
+              .toIso8601String(),
+        },
+        {
+          'date': DateTime.now()
+              .subtract(const Duration(days: 380))
+              .toIso8601String(),
+        },
+      ];
+
+      // Without freeze, >210 days since last donation resets streak to 0
+      expect(
+        settings.computeDonorStreak(oldHistory, isFrozenOverride: false),
+        0,
+      );
+
+      // With Medical Freeze active, donor is never penalized for medical deferral
+      expect(
+        settings.computeDonorStreak(oldHistory, isFrozenOverride: true),
+        2,
+      );
+    });
+
+    test('Offline emergency cache, health journal, .ics calendar & fuzzy search work',
+        () async {
+      final settings = AppSettingsService();
+      await settings.init();
+
+      await settings.cacheEmergencyRequests([
+        {
+          'id': 'req-1',
+          'blood_type': 'O-',
+          'hospital_name': 'Dhaka Medical College Hospital',
+          'city': 'Dhaka',
+        }
+      ]);
+      final cached = await settings.loadCachedEmergencyRequests();
+      expect(cached.length, 1);
+      expect(cached.first['blood_type'], 'O-');
+
+      await settings.addHealthJournalEntry({
+        'id': 'hj-1',
+        'hemoglobin_g_dl': '14.4',
+        'blood_pressure': '120/80',
+        'notes': 'Feeling great',
+      });
+      final journal = await settings.getHealthJournalEntries();
+      expect(journal.length, 1);
+      expect(journal.first['hemoglobin_g_dl'], '14.4');
+
+      final ics = settings.generateBloodCampIcs(
+        title: 'DMCH Blood Drive',
+        location: 'Dhaka',
+        description: 'Community drive',
+        startTime: DateTime.utc(2026, 11, 10, 9),
+        endTime: DateTime.utc(2026, 11, 10, 15),
+      );
+      expect(ics, contains('BEGIN:VCALENDAR'));
+      expect(ics, contains('SUMMARY:DMCH Blood Drive'));
+
+      expect(
+        AppSettingsService.fuzzyMatchScore(
+            'Dhaka Medical College Hospital', 'dhka med'),
+        greaterThan(0.30),
+      );
+    });
+
+    testWidgets(
+        'Upgraded DigitalPassCard renders Gold Guardian tier, Action Dock, and flips cleanly',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.darkTheme,
+          home: const Scaffold(
+            body: SingleChildScrollView(
+              child: DigitalPassCard(
+                donorName: 'Tanvir Hasan',
+                bloodType: 'O-',
+                donorId: 'RCN-99887766',
+                isVerified: true,
+                totalDonations: 6,
+                livesSaved: 18,
+                lastDonationDate: 'Oct 1, 2026',
+                nextEligibleDate: 'Dec 30, 2026',
+                emergencyContact: '01711000000',
+                points: 650,
+                streakCount: 4,
+                isEligible: false,
+                daysUntilEligible: 22,
+                showActionDock: true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('GOLD GUARDIAN'), findsOneWidget);
+      expect(find.text('O-'), findsOneWidget);
+      expect(find.text('Share PNG'), findsOneWidget);
+      expect(find.text('Hospital QR'), findsOneWidget);
+      expect(find.byType(RedCellNetLogo), findsOneWidget);
+    });
+  });
 }

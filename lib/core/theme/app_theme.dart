@@ -3,27 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
-  // Brand & Surface Colors (Per Design Specification)
-  static const Color primary = Color(0xFFA41235); // Deep Burgundy - Primary Brand
-  static const Color primaryDark = Color(0xFF7A0D27);
-  static const Color primaryLight = Color(0xFFFFE4E6); // Rose 100
-  static const Color primaryAccent = Color(0xFFE11D48); // Crimson - Emergency Accent
-  static const Color primaryContainer = Color(0xFFFFF1F2); // Pale Rose - Soft Surface
+  // Brand & Surface Colors ("LifePulse" Arterial Color Grading)
+  static const Color primary = Color(0xFFB01032); // Arterial Deep Ruby - Primary Brand
+  static const Color primaryDark = Color(0xFF7A0922); // Deep Venous Burgundy
+  static const Color primaryLight = Color(0xFFFFE4E8); // Soft Rose Tint
+  static const Color primaryAccent = Color(0xFFF41C47); // Vivid LifePulse Crimson
+  static const Color primaryContainer = Color(0xFFFFF1F3); // Warm Alabaster Rose
 
   // Emergency Accent
-  static const Color emergency = Color(0xFFE11D48); // Crimson
+  static const Color emergency = Color(0xFFE11D48); // High-Visibility Crimson
   static const Color emergencyContainer = Color(0xFFFFE4E6);
 
   // Healthcare Information
-  static const Color secondary = Color(0xFF0284C7); // Medical Blue
-  static const Color secondaryLight = Color(0xFFE0F2FE); // Pale Blue
+  static const Color secondary = Color(0xFF0284C7); // Clinical Cerulean
+  static const Color secondaryLight = Color(0xFFE0F2FE); // Pale Ice Blue
   static const Color secondaryDark = Color(0xFF0369A1);
 
   // Accent Violet for achievements & gamification
-  static const Color accent = Color(0xFF8B5CF6);
+  static const Color accent = Color(0xFF7C3AED);
   static const Color accentLight = Color(0xFFF3E8FF);
 
-  // Status & Urgency Colors
+  // Status & Urgency Colors (WCAG AA+ Contrast Graded)
   static const Color critical = Color(0xFFDC2626); // Critical Red
   static const Color criticalLight = Color(0xFFFEE2E2);
   static const Color high = Color(0xFFEA580C); // High Priority Orange
@@ -33,125 +33,205 @@ class AppColors {
   static const Color warning = Color(0xFFD97706); // Warning Amber
   static const Color warningLight = Color(0xFFFEF3C7);
   static const Color warningDark = Color(0xFFB45309);
-  static const Color low = Color(0xFF059669); // Scheduled / Green
+  static const Color low = Color(0xFF059669); // Scheduled / Emerald
   static const Color lowLight = Color(0xFFD1FAE5);
   static const Color success = Color(0xFF059669); // Success / Available Green
   static const Color successLight = Color(0xFFECFDF5);
   static const Color pointsGold = Color(0xFFF59E0B);
   static const Color goldLight = Color(0xFFFFFBEB);
 
-  // Neutrals & Surfaces (Light)
-  static const Color scaffoldBackground = Color(0xFFF8FAFC); // Off-white
-  static const Color surface = Color(0xFFFFFFFF); // Card Surface White
-  static const Color surfaceMuted = Color(0xFFF1F5F9); // Slate 100
+  // Neutrals & Surfaces (Light — Warm Clinical Porcelain)
+  static const Color scaffoldBackground = Color(0xFFF8F9FC);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surfaceMuted = Color(0xFFF1F5F9);
   static const Color surfaceElevated = Colors.white;
-  static const Color border = Color(0xFFE2E8F0); // Slate 200
+  static const Color border = Color(0xFFE2E8F0);
   static const Color borderSubtle = Color(0xFFF1F5F9);
   static const Color divider = Color(0xFFF1F5F9);
 
   // Typography (Light)
-  static const Color textPrimary = Color(0xFF0F172A); // Slate 900
-  static const Color textSecondary = Color(0xFF64748B); // Slate Grey 500
-  static const Color textMuted = Color(0xFF94A3B8); // Slate 400
+  static const Color textPrimary = Color(0xFF0B1120);
+  static const Color textSecondary = Color(0xFF475569);
+  static const Color textMuted = Color(0xFF94A3B8);
 
-  // Dark Theme Neutrals & Surfaces ("LifePulse" Obsidian Palette)
-  static const Color darkScaffoldBackground = Color(0xFF090D16); // Deep Obsidian Canvas
-  static const Color darkSurface = Color(0xFF121826); // Slate Surface 850
-  static const Color darkSurfaceMuted = Color(0xFF1E293B); // Slate 800
-  static const Color darkBorder = Color(0xFF243048); // Subtle border
-  static const Color darkBorderSubtle = Color(0x1FFFFFFF); // 12% Translucent White
+  // Dark Theme Neutrals & Surfaces ("LifePulse" Obsidian-Ruby Palette)
+  static const Color darkScaffoldBackground = Color(0xFF080B13); // Deep Obsidian Canvas
+  static const Color darkSurface = Color(0xFF101624); // Elevated Obsidian Card
+  static const Color darkSurfaceMuted = Color(0xFF1A2336); // Muted Slate Surface
+  static const Color darkBorder = Color(0xFF25324C); // Crisp Luminous Border
+  static const Color darkBorderSubtle = Color(0x1FFFFFFF);
   static const Color darkTextPrimary = Color(0xFFF8FAFC);
   static const Color darkTextSecondary = Color(0xFF94A3B8);
   static const Color darkTextMuted = Color(0xFF64748B);
-  static const Color darkPrimaryContainer = Color(0xFF4C0519); // Rose 950
+  static const Color darkPrimaryContainer = Color(0xFF4C0519);
 
-  // LifePulse Brand Tokens
-  static const Color obsidianCanvas = Color(0xFF090D16);
-  static const Color obsidianSurface = Color(0xFF121826);
-  static const Color lifePulseCrimson = Color(0xFFE11D48);
+  // LifePulse & Tier Brand Tokens
+  static const Color obsidianCanvas = Color(0xFF080B13);
+  static const Color obsidianSurface = Color(0xFF101624);
+  static const Color lifePulseCrimson = Color(0xFFF41C47);
+  static const Color arterialRuby = Color(0xFFD9143C);
+  static const Color roseGold = Color(0xFFFDA4AF);
   static const Color vitalEmerald = Color(0xFF059669);
   static const Color vitalEmeraldLight = Color(0xFFECFDF5);
   static const Color imperialGold = Color(0xFFF59E0B);
   static const Color imperialGoldLight = Color(0xFFFFFBEB);
   static const Color cyberCyan = Color(0xFF06B6D4);
   static const Color cyberCyanLight = Color(0xFFECFEFF);
+  static const Color freezeIce = Color(0xFF38BDF8);
 
-  // Controlled Gradients (Burgundy & Emergency & Glass)
+  // Controlled Multi-Stop Color-Graded Gradients
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFFA41235), Color(0xFF7A0D27)],
+    colors: [Color(0xFFD9143C), Color(0xFFA41235), Color(0xFF6E081F)],
+    stops: [0.0, 0.55, 1.0],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
   static const LinearGradient heroGradient = primaryGradient;
 
   static const LinearGradient emergencyGradient = LinearGradient(
-    colors: [Color(0xFFE11D48), Color(0xFFA41235)],
+    colors: [Color(0xFFFF244E), Color(0xFFD9143C), Color(0xFF8F0B27)],
+    stops: [0.0, 0.5, 1.0],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient vitalGradient = LinearGradient(
-    colors: [Color(0xFF059669), Color(0xFF0D9488)],
+    colors: [Color(0xFF10B981), Color(0xFF059669), Color(0xFF047857)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient goldGradient = LinearGradient(
-    colors: [Color(0xFFFBBF24), Color(0xFFD97706)],
+    colors: [Color(0xFFFBBF24), Color(0xFFF59E0B), Color(0xFFB45309)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient skyGradient = LinearGradient(
-    colors: [Color(0xFF38BDF8), Color(0xFF0284C7)],
+    colors: [Color(0xFF38BDF8), Color(0xFF0284C7), Color(0xFF0369A1)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
+  );
+
+  // Digital Pass Tier Gradients (for 3D Wallet Flip Card)
+  static const LinearGradient passCrimsonGradient = LinearGradient(
+    colors: [
+      Color(0xFF3A0717),
+      Color(0xFF8C0D29),
+      Color(0xFFD9143C),
+      Color(0xFF470618),
+    ],
+    stops: [0.0, 0.38, 0.72, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient passGoldGuardianGradient = LinearGradient(
+    colors: [
+      Color(0xFF1E1306),
+      Color(0xFF78350F),
+      Color(0xFFD97706),
+      Color(0xFF451A03),
+    ],
+    stops: [0.0, 0.4, 0.75, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient passSilverHeroGradient = LinearGradient(
+    colors: [
+      Color(0xFF0F172A),
+      Color(0xFF1E3A5F),
+      Color(0xFF0284C7),
+      Color(0xFF0B132B),
+    ],
+    stops: [0.0, 0.42, 0.76, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient passFrozenGradient = LinearGradient(
+    colors: [
+      Color(0xFF082F49),
+      Color(0xFF0369A1),
+      Color(0xFF0EA5E9),
+      Color(0xFF0C4A6E),
+    ],
+    stops: [0.0, 0.42, 0.76, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient holographicSheenGradient = LinearGradient(
+    colors: [
+      Color(0x00FFFFFF),
+      Color(0x18FFFFFF),
+      Color(0x06FDA4AF),
+      Color(0x1438BDF8),
+      Color(0x00FFFFFF),
+    ],
+    stops: [0.0, 0.32, 0.5, 0.68, 1.0],
+    begin: Alignment(-0.9, -0.8),
+    end: Alignment(0.9, 0.8),
   );
 
   static LinearGradient glassGradient(BuildContext context) => LinearGradient(
         colors: isDark(context)
             ? [
-                const Color(0xFF1E293B).withValues(alpha: 0.65),
-                const Color(0xFF0F172A).withValues(alpha: 0.45)
+                const Color(0xFF1E293B).withValues(alpha: 0.72),
+                const Color(0xFF0F172A).withValues(alpha: 0.52),
               ]
             : [
-                Colors.white.withValues(alpha: 0.90),
-                Colors.white.withValues(alpha: 0.70)
+                Colors.white.withValues(alpha: 0.92),
+                Colors.white.withValues(alpha: 0.76),
               ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
 
+  static Color urgencyColor(String? urgency) {
+    switch ((urgency ?? '').toLowerCase().trim()) {
+      case 'critical':
+        return critical;
+      case 'high':
+        return high;
+      case 'medium':
+        return medium;
+      default:
+        return low;
+    }
+  }
+
   // Soft shadows & LifePulse Neon Glows
   static List<BoxShadow> get softShadow => [
         BoxShadow(
-          color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-          blurRadius: 14,
-          offset: const Offset(0, 3),
+          color: const Color(0xFF0F172A).withValues(alpha: 0.045),
+          blurRadius: 16,
+          offset: const Offset(0, 4),
         ),
       ];
 
   static List<BoxShadow> get cardShadow => [
         BoxShadow(
           color: const Color(0xFF0F172A).withValues(alpha: 0.05),
-          blurRadius: 10,
-          offset: const Offset(0, 2),
+          blurRadius: 12,
+          offset: const Offset(0, 3),
         ),
       ];
 
   static List<BoxShadow> get glowPrimary => [
         BoxShadow(
-          color: primary.withValues(alpha: 0.24),
-          blurRadius: 14,
-          offset: const Offset(0, 4),
+          color: primary.withValues(alpha: 0.28),
+          blurRadius: 16,
+          offset: const Offset(0, 5),
         ),
       ];
 
   static List<BoxShadow> get glowEmergency => [
         BoxShadow(
-          color: emergency.withValues(alpha: 0.32),
-          blurRadius: 16,
-          offset: const Offset(0, 5),
+          color: emergency.withValues(alpha: 0.34),
+          blurRadius: 18,
+          offset: const Offset(0, 6),
         ),
       ];
 
@@ -165,9 +245,9 @@ class AppColors {
 
   static List<BoxShadow> get glowGold => [
         BoxShadow(
-          color: imperialGold.withValues(alpha: 0.30),
-          blurRadius: 16,
-          offset: const Offset(0, 4),
+          color: imperialGold.withValues(alpha: 0.32),
+          blurRadius: 18,
+          offset: const Offset(0, 5),
         ),
       ];
 
@@ -181,7 +261,7 @@ class AppColors {
   static Border glassBorder(BuildContext context, {double width = 1.0}) =>
       Border.all(
         color: isDark(context)
-            ? Colors.white.withValues(alpha: 0.08)
+            ? Colors.white.withValues(alpha: 0.09)
             : Colors.black.withValues(alpha: 0.06),
         width: width,
       );
@@ -288,7 +368,7 @@ class AppTheme {
         color: AppColors.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           side: const BorderSide(color: AppColors.border, width: 1),
         ),
         margin: EdgeInsets.zero,
@@ -361,7 +441,11 @@ class AppTheme {
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.critical, width: 2.0),
         ),
-        labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
         hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
         prefixIconColor: AppColors.textSecondary,
         suffixIconColor: AppColors.textSecondary,
@@ -390,7 +474,7 @@ class AppTheme {
 
       dialogTheme: DialogThemeData(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         elevation: 6,
       ),
 
@@ -421,7 +505,7 @@ class AppTheme {
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primary,
         brightness: Brightness.dark,
-        primary: const Color(0xFFE11D48),
+        primary: const Color(0xFFF41C47),
         onPrimary: Colors.white,
         secondary: AppColors.secondary,
         onSecondary: Colors.white,
@@ -453,7 +537,7 @@ class AppTheme {
         color: AppColors.darkSurface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           side: const BorderSide(color: AppColors.darkBorder, width: 1),
         ),
         margin: EdgeInsets.zero,
@@ -505,7 +589,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE11D48), width: 2.0),
+          borderSide: const BorderSide(color: Color(0xFFF41C47), width: 2.0),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -534,12 +618,12 @@ class AppTheme {
 
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.darkSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         elevation: 6,
       ),
 
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: const Color(0xFFE11D48),
+        backgroundColor: const Color(0xFFF41C47),
         foregroundColor: Colors.white,
         elevation: 4,
         highlightElevation: 8,

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:red_cell_net_final/core/services/supabase_auth_service.dart';
 import 'package:red_cell_net_final/core/theme/app_theme.dart';
+import 'package:red_cell_net_final/core/widgets/common_widgets.dart';
 import 'package:red_cell_net_final/features/auth/presentation/pages/register_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -236,36 +237,10 @@ class _LoginPageState extends State<LoginPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // --- Brand Hero ---
-                  Center(
-                    child: Container(
-                      width: 84,
-                      height: 84,
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF4C0519)
-                            : AppColors.primaryLight,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.20),
-                            blurRadius: 18,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      child: Image.asset(
-                        'assets/icon/icon.png',
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                          Icons.water_drop_rounded,
-                          size: 44,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
+                  const Center(
+                    child: RedCellNetLogo(size: 86),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
                   const Text(
                     'RedCellNet',
                     style: TextStyle(
@@ -286,7 +261,15 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 14),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () => showGuestEmergencyPreviewSheet(context),
+                      icon: const Icon(Icons.radar_rounded, size: 17),
+                      label: const Text('Browse Emergency Feed as Guest'),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
 
                   // --- Error Message Banner ---
                   if (_errorMessage != null)

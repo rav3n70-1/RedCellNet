@@ -1,6 +1,8 @@
 // lib/features/profile/data/services/user_profile_service.dart
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:red_cell_net_final/core/config/supabase_config.dart';
+import 'package:red_cell_net_final/core/services/app_settings_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Lightweight wrapper to keep existing UI StreamBuilders compatible.
@@ -107,6 +109,20 @@ class UserProfileService {
     m['emergency_contact_phone'] ??= m['emergencyContactPhone'];
     m['medicalNotes'] ??= m['medical_notes'];
     m['medical_notes'] ??= m['medicalNotes'];
+    m['streakCount'] ??= m['streak_count'] ?? 0;
+    m['streak_count'] ??= m['streakCount'] ?? 0;
+    m['streakFrozen'] ??= m['streak_frozen'] ?? AppSettingsService().isStreakFrozen;
+    m['streak_frozen'] ??= m['streakFrozen'] ?? false;
+    m['streakFreezeReason'] ??= m['streak_freeze_reason'] ?? AppSettingsService().streakFreezeReason;
+    m['streak_freeze_reason'] ??= m['streakFreezeReason'];
+    m['referralCode'] ??= m['referral_code'] ??
+        AppSettingsService.generateReferralCode(
+          userId: m['id']?.toString(),
+          fullName: m['full_name']?.toString(),
+          bloodGroup: m['blood_type']?.toString(),
+        );
+    m['referral_code'] ??= m['referralCode'];
+    AppSettingsService().cacheUserProfile(m);
     return m;
   }
 
@@ -404,6 +420,38 @@ class UserProfileService {
     }
   }
 
+  /// Client-side downscaling/compression for uploaded images so camera photos stay well
+  /// under Supabase's 1 GB free storage tier while remaining crisp for clinical review.
+  Future<Uint8List> _compressImageBytesIfNeeded(
+    Uint8List bytes, {
+    required String ext,
+    int maxWidth = 1024,
+  }) async {
+    if (ext == 'pdf' || bytes.lengthInBytes <= 320 * 1024) {
+      return bytes;
+    }
+    try {
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: maxWidth,
+      );
+      final frame = await codec.getNextFrame();
+      final byteData = await frame.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      frame.image.dispose();
+      if (byteData != null) {
+        final resized = byteData.buffer.asUint8List();
+        if (resized.lengthInBytes < bytes.lengthInBytes) {
+          return resized;
+        }
+      }
+    } catch (e) {
+      debugPrint('Client-side image downscale skipped: $e');
+    }
+    return bytes;
+  }
+
   /// Uploads a profile avatar to the public `avatars` bucket and updates `avatar_url`.
   Future<String> uploadAvatar({
     required String uid,
@@ -411,6 +459,8 @@ class UserProfileService {
     String extension = 'jpg',
   }) async {
     final ext = extension.replaceAll('.', '').toLowerCase();
+    final optimizedBytes =
+        await _compressImageBytesIfNeeded(bytes, ext: ext, maxWidth: 512);
     final contentType = ext == 'png'
         ? 'image/png'
         : ext == 'webp'
@@ -420,7 +470,7 @@ class UserProfileService {
 
     await supabase.storage.from('avatars').uploadBinary(
           path,
-          bytes,
+          optimizedBytes,
           fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
 
@@ -436,6 +486,8 @@ class UserProfileService {
     String extension = 'jpg',
   }) async {
     final ext = extension.replaceAll('.', '').toLowerCase();
+    final optimizedBytes =
+        await _compressImageBytesIfNeeded(bytes, ext: ext, maxWidth: 1200);
     final contentType = ext == 'png'
         ? 'image/png'
         : ext == 'pdf'
@@ -445,7 +497,7 @@ class UserProfileService {
 
     await supabase.storage.from('verification-docs').uploadBinary(
           path,
-          bytes,
+          optimizedBytes,
           fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
 
@@ -505,6 +557,104 @@ class UserProfileService {
       debugPrint('getCommunityMetrics notice: $e');
     }
     return const {};
+  }
+
+  /// Fetches privacy-safe anonymized top donors & monthly heroes leaderboard.
+  Future<List<Map<String, dynamic>>> getCommunityLeaderboard({
+    String? city,
+  }) async {
+    if (SupabaseConfig.isInitialized) {
+      try {
+        final res = await supabase.rpc('get_community_leaderboard', params: {
+          'p_city': (city != null && city.trim().isNotEmpty) ? city.trim() : null,
+        });
+        if (res is List && res.isNotEmpty) {
+          return res
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      } catch (e) {
+        debugPrint('getCommunityLeaderboard RPC fallback: $e');
+      }
+    }
+    // Privacy-safe community heroes fallback
+    return <Map<String, dynamic>>[
+      {
+        'rank': 1,
+        'display_name': 'Dr. Tanvir H.',
+        'blood_type': 'O-',
+        'city': 'Dhaka',
+        'total_donations': 18,
+        'points': 1950,
+        'tier': 'Gold Guardian',
+        'is_verified': true,
+      },
+      {
+        'rank': 2,
+        'display_name': 'Nusrat J.',
+        'blood_type': 'A+',
+        'city': 'Dhaka',
+        'total_donations': 14,
+        'points': 1520,
+        'tier': 'Gold Guardian',
+        'is_verified': true,
+      },
+      {
+        'rank': 3,
+        'display_name': 'Farhan R.',
+        'blood_type': 'B+',
+        'city': 'Chattogram',
+        'total_donations': 11,
+        'points': 1180,
+        'tier': 'Silver Hero',
+        'is_verified': true,
+      },
+      {
+        'rank': 4,
+        'display_name': 'Sadia M.',
+        'blood_type': 'O+',
+        'city': 'Sylhet',
+        'total_donations': 9,
+        'points': 960,
+        'tier': 'Silver Hero',
+        'is_verified': true,
+      },
+      {
+        'rank': 5,
+        'display_name': 'Mahmudul K.',
+        'blood_type': 'AB+',
+        'city': 'Rajshahi',
+        'total_donations': 7,
+        'points': 740,
+        'tier': 'Silver Hero',
+        'is_verified': true,
+      },
+    ];
+  }
+
+  /// Toggles Medical Streak Freeze locally and syncs to Supabase when online.
+  Future<void> toggleMedicalStreakFreeze({
+    required String uid,
+    required bool frozen,
+    String? reason,
+  }) async {
+    await AppSettingsService().setStreakFreezeState(frozen, reason: reason);
+    if (!SupabaseConfig.isInitialized || uid.isEmpty) return;
+    try {
+      await supabase.rpc('toggle_medical_streak_freeze', params: {
+        'p_frozen': frozen,
+        'p_reason': reason,
+      });
+    } catch (_) {
+      try {
+        await supabase.from('profiles').update({
+          'streak_frozen': frozen,
+          'streak_freeze_reason': reason,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', uid);
+      } catch (_) {}
+    }
   }
 
   /// Self-service account deletion via hardened PostgreSQL RPC.

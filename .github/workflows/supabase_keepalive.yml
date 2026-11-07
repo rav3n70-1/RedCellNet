@@ -1,0 +1,30 @@
+name: Supabase Free-Tier Keep-Alive & Cleanup
+
+on:
+  schedule:
+    # Runs every 3 days at 04:00 UTC so the Supabase Free-Tier project never pauses after 7 days of inactivity
+    - cron: '0 4 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Keep-Alive RPC
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "Set SUPABASE_URL and SUPABASE_ANON_KEY in GitHub Repository Secrets -> Actions."
+            exit 0
+          fi
+          curl --fail --silent --show-error \
+            -X POST "${SUPABASE_URL}/rest/v1/rpc/health_keepalive_ping" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+          echo ""
+          echo "Supabase keep-alive ping succeeded."
+

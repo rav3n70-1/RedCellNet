@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:red_cell_net_final/core/services/app_settings_service.dart';
 import 'package:red_cell_net_final/core/theme/app_theme.dart';
+import 'package:red_cell_net_final/core/widgets/common_widgets.dart';
 
 class OnboardingPage extends StatefulWidget {
   final VoidCallback onFinished;
@@ -243,7 +244,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
+              TextButton.icon(
+                onPressed: () => showGuestEmergencyPreviewSheet(context),
+                icon: const Icon(Icons.radar_rounded, size: 16),
+                label: Text(
+                  settings.tr('Browse Emergency Feed as Guest'),
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                ),
+              ),
             ],
           ),
         ),

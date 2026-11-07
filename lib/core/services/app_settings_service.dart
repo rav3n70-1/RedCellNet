@@ -15,6 +15,14 @@ class AppSettingsService {
   static const String _keyBookmarkedRequests = 'rcn_bookmarked_requests';
   static const String _keyStaffWorkspaceMode = 'rcn_staff_workspace_mode';
 
+  // Zero-Cost Offline & Health Keys
+  static const String _keyCachedEmergencyRequests = 'rcn_cached_emergency_requests';
+  static const String _keyCachedUserProfile = 'rcn_cached_user_profile';
+  static const String _keyOfflineActionQueue = 'rcn_offline_action_queue';
+  static const String _keyStreakFrozen = 'rcn_donor_streak_frozen';
+  static const String _keyStreakFreezeReason = 'rcn_donor_streak_freeze_reason';
+  static const String _keyHealthJournal = 'rcn_donor_health_journal';
+
   SharedPreferences? _prefs;
   bool _initialized = false;
 
@@ -30,6 +38,10 @@ class AppSettingsService {
   /// Staff ('admin' / 'moderator') can switch between 'admin' console and 'donor' app.
   final ValueNotifier<String> staffWorkspaceModeNotifier =
       ValueNotifier<String>('admin');
+
+  /// Tracks whether the donor's streak is currently protected by Medical Freeze.
+  final ValueNotifier<bool> streakFrozenNotifier = ValueNotifier<bool>(false);
+  String? _streakFreezeReason;
 
   Future<void> init() async {
     if (_initialized) return;
@@ -60,6 +72,10 @@ class AppSettingsService {
       if (savedStaffMode == 'donor' || savedStaffMode == 'admin') {
         staffWorkspaceModeNotifier.value = savedStaffMode!;
       }
+
+      streakFrozenNotifier.value = _prefs?.getBool(_keyStreakFrozen) ?? false;
+      _streakFreezeReason = _prefs?.getString(_keyStreakFreezeReason);
+
       _initialized = true;
     } catch (e) {
       debugPrint('AppSettingsService.init notice: $e');
@@ -172,6 +188,397 @@ class AppSettingsService {
     return added;
   }
 
+  // --- Zero-Cost Feature 1: Offline Emergency Cache ---
+  Future<void> cacheEmergencyRequests(
+      List<Map<String, dynamic>> requests) async {
+    try {
+      final prefs = await _ensurePrefs();
+      final trimmed = requests.take(25).map((r) {
+        final copy = Map<String, dynamic>.from(r);
+        return copy;
+      }).toList();
+      await prefs?.setString(_keyCachedEmergencyRequests, jsonEncode(trimmed));
+    } catch (e) {
+      debugPrint('cacheEmergencyRequests notice: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> loadCachedEmergencyRequests() async {
+    try {
+      final prefs = await _ensurePrefs();
+      final raw = prefs?.getString(_keyCachedEmergencyRequests);
+      if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    } catch (_) {}
+    return <Map<String, dynamic>>[];
+  }
+
+  Future<void> cacheUserProfile(Map<String, dynamic> profile) async {
+    try {
+      final prefs = await _ensurePrefs();
+      await prefs?.setString(_keyCachedUserProfile, jsonEncode(profile));
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> loadCachedUserProfile() async {
+    try {
+      final prefs = await _ensurePrefs();
+      final raw = prefs?.getString(_keyCachedUserProfile);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // --- Zero-Cost Feature 2: Queued Offline Mutations ---
+  Future<void> enqueueOfflineAction(Map<String, dynamic> action) async {
+    final prefs = await _ensurePrefs();
+    final current = await loadOfflineActionQueue();
+    final nextAction = <String, dynamic>{
+      ...action,
+      'queued_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    current.add(nextAction);
+    await prefs?.setString(_keyOfflineActionQueue, jsonEncode(current));
+  }
+
+  Future<List<Map<String, dynamic>>> loadOfflineActionQueue() async {
+    try {
+      final prefs = await _ensurePrefs();
+      final raw = prefs?.getString(_keyOfflineActionQueue);
+      if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    } catch (_) {}
+    return <Map<String, dynamic>>[];
+  }
+
+  Future<void> clearOfflineActionQueue() async {
+    final prefs = await _ensurePrefs();
+    await prefs?.remove(_keyOfflineActionQueue);
+  }
+
+  // --- Zero-Cost Feature 3: Donor Streaks with Medical Freeze ---
+  bool get isStreakFrozen => streakFrozenNotifier.value;
+  String? get streakFreezeReason => _streakFreezeReason;
+
+  Future<void> setStreakFreezeState(bool frozen, {String? reason}) async {
+    streakFrozenNotifier.value = frozen;
+    _streakFreezeReason = frozen ? (reason?.trim().isNotEmpty == true ? reason!.trim() : 'Medical Deferral') : null;
+    final prefs = await _ensurePrefs();
+    await prefs?.setBool(_keyStreakFrozen, frozen);
+    if (_streakFreezeReason != null) {
+      await prefs?.setString(_keyStreakFreezeReason, _streakFreezeReason!);
+    } else {
+      await prefs?.remove(_keyStreakFreezeReason);
+    }
+  }
+
+  /// Calculates the donor's active donation streak.
+  /// Each donation within ~180 days (twice a year) extends the streak.
+  /// When [isFrozenOverride] or [isStreakFrozen] is true (e.g. temporary medical
+  /// deferral, low hemoglobin, travel, pregnancy), the streak never resets to 0.
+  int computeDonorStreak(
+    List<dynamic> donationHistory, {
+    bool? isFrozenOverride,
+    int? fallbackDonationsCount,
+  }) {
+    final frozen = isFrozenOverride ?? streakFrozenNotifier.value;
+    final dates = <DateTime>[];
+    for (final item in donationHistory) {
+      if (item is Map) {
+        final rawDate = (item['date'] ?? item['donated_at'] ?? item['created_at'] ?? '').toString();
+        final parsed = DateTime.tryParse(rawDate);
+        if (parsed != null) {
+          dates.add(parsed.toUtc());
+        }
+      }
+    }
+
+    if (dates.isEmpty) {
+      final count = fallbackDonationsCount ?? donationHistory.length;
+      return count > 0 ? 1 : 0;
+    }
+
+    dates.sort((a, b) => b.compareTo(a)); // newest first
+    final now = DateTime.now().toUtc();
+    final daysSinceLatest = now.difference(dates.first).inDays;
+
+    // Without medical freeze, if the last donation was more than 210 days ago, streak resets.
+    if (!frozen && daysSinceLatest > 210) {
+      return 0;
+    }
+
+    int streak = 1;
+    for (int i = 0; i < dates.length - 1; i++) {
+      final gapDays = dates[i].difference(dates[i + 1]).inDays.abs();
+      if (gapDays <= 210 || frozen) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  // --- Zero-Cost Feature 4: Personal Donation & Hemoglobin Journal ---
+  Future<List<Map<String, dynamic>>> getHealthJournalEntries() async {
+    try {
+      final prefs = await _ensurePrefs();
+      final raw = prefs?.getString(_keyHealthJournal);
+      if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final list = decoded
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        list.sort((a, b) {
+          final da = DateTime.tryParse((a['recorded_at'] ?? '').toString()) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final db = DateTime.tryParse((b['recorded_at'] ?? '').toString()) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          return db.compareTo(da);
+        });
+        return list;
+      }
+    } catch (_) {}
+    return <Map<String, dynamic>>[];
+  }
+
+  Future<void> addHealthJournalEntry(Map<String, dynamic> entry) async {
+    final prefs = await _ensurePrefs();
+    final current = await getHealthJournalEntries();
+    final newEntry = <String, dynamic>{
+      'id': entry['id'] ?? 'hj_${DateTime.now().millisecondsSinceEpoch}',
+      'recorded_at': entry['recorded_at'] ?? DateTime.now().toUtc().toIso8601String(),
+      'hemoglobin_g_dl': entry['hemoglobin_g_dl'],
+      'blood_pressure': entry['blood_pressure'] ?? '',
+      'weight_kg': entry['weight_kg'],
+      'pulse_bpm': entry['pulse_bpm'],
+      'feeling_rating': entry['feeling_rating'] ?? 5,
+      'iron_supplement': entry['iron_supplement'] == true,
+      'notes': entry['notes'] ?? '',
+    };
+    current.insert(0, newEntry);
+    await prefs?.setString(_keyHealthJournal, jsonEncode(current));
+  }
+
+  Future<void> deleteHealthJournalEntry(String entryId) async {
+    final prefs = await _ensurePrefs();
+    final current = await getHealthJournalEntries();
+    current.removeWhere((e) => e['id']?.toString() == entryId);
+    await prefs?.setString(_keyHealthJournal, jsonEncode(current));
+  }
+
+  // --- Zero-Cost Feature 5: Blood Camp Calendar & .ics / Google Calendar Export ---
+  List<Map<String, dynamic>> getUpcomingBloodCamps() {
+    final now = DateTime.now();
+    return <Map<String, dynamic>>[
+      {
+        'id': 'camp_dmch_drive',
+        'title': 'DMCH Emergency Red Cell & Platelet Drive',
+        'organizer': 'Dhaka Medical College Transfusion Dept',
+        'location': 'DMCH Blood Bank Auditorium, Ramna, Dhaka',
+        'city': 'Dhaka',
+        'start_time': now.add(const Duration(days: 3, hours: 2)).toIso8601String(),
+        'end_time': now.add(const Duration(days: 3, hours: 8)).toIso8601String(),
+        'target_units': 150,
+        'description':
+            'Walk-in whole blood & apheresis platelet drive with free Hemoglobin, Blood Grouping & Hepatitis screening.',
+      },
+      {
+        'id': 'camp_red_crescent_youth',
+        'title': 'BDRCS Thalassemia Support Blood Camp',
+        'organizer': 'Bangladesh Red Crescent Society',
+        'location': '7/5 Aurongzeb Road, Mohammadpur, Dhaka',
+        'city': 'Dhaka',
+        'start_time': now.add(const Duration(days: 7, hours: 3)).toIso8601String(),
+        'end_time': now.add(const Duration(days: 7, hours: 9)).toIso8601String(),
+        'target_units': 200,
+        'description':
+            'Dedicated blood drive supporting pediatric Thalassemia patients requiring regular packed red cell transfusions.',
+      },
+      {
+        'id': 'camp_cmc_lifepulse',
+        'title': 'Chattogram LifePulse Community Blood Drive',
+        'organizer': 'Chittagong Medical College & Sandhani',
+        'location': 'CMC Academic Building Ground Floor, Chattogram',
+        'city': 'Chattogram',
+        'start_time': now.add(const Duration(days: 11, hours: 2)).toIso8601String(),
+        'end_time': now.add(const Duration(days: 11, hours: 7)).toIso8601String(),
+        'target_units': 120,
+        'description':
+            'Community donor registration, free iron/hemoglobin consultation, and emergency O- / AB- registry drive.',
+      },
+      {
+        'id': 'camp_somc_sylhet',
+        'title': 'Sylhet Maternal & Trauma Blood Reserve Camp',
+        'organizer': 'MAG Osmani Medical College Hospital',
+        'location': 'Medical College Road, Sylhet',
+        'city': 'Sylhet',
+        'start_time': now.add(const Duration(days: 15, hours: 1)).toIso8601String(),
+        'end_time': now.add(const Duration(days: 15, hours: 6)).toIso8601String(),
+        'target_units': 100,
+        'description':
+            'Regional emergency blood reserve camp with digital donor pass verification and wellness checkup.',
+      },
+    ];
+  }
+
+  String _formatIcsUtc(DateTime dt) {
+    final u = dt.toUtc();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${u.year}${two(u.month)}${two(u.day)}T${two(u.hour)}${two(u.minute)}${two(u.second)}Z';
+  }
+
+  String generateBloodCampIcs({
+    required String title,
+    required String location,
+    required String description,
+    required DateTime startTime,
+    required DateTime endTime,
+  }) {
+    final nowStamp = _formatIcsUtc(DateTime.now());
+    final startStamp = _formatIcsUtc(startTime);
+    final endStamp = _formatIcsUtc(endTime);
+    final safeTitle = title.replaceAll('\n', ' ').trim();
+    final safeLocation = location.replaceAll('\n', ' ').trim();
+    final safeDesc = description.replaceAll('\n', '\\n').trim();
+
+    return [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//RedCellNet//LifePulse Blood Network//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      'BEGIN:VEVENT',
+      'UID:rcn-${startTime.millisecondsSinceEpoch}@redcellnet.org',
+      'DTSTAMP:$nowStamp',
+      'DTSTART:$startStamp',
+      'DTEND:$endStamp',
+      'SUMMARY:$safeTitle',
+      'LOCATION:$safeLocation',
+      'DESCRIPTION:$safeDesc',
+      'STATUS:CONFIRMED',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+  }
+
+  String buildGoogleCalendarUrl({
+    required String title,
+    required String location,
+    required String description,
+    required DateTime startTime,
+    required DateTime endTime,
+  }) {
+    final dates = '${_formatIcsUtc(startTime)}/${_formatIcsUtc(endTime)}';
+    final uri = Uri.https('calendar.google.com', '/calendar/render', {
+      'action': 'TEMPLATE',
+      'text': title,
+      'dates': dates,
+      'details': description,
+      'location': location,
+    });
+    return uri.toString();
+  }
+
+  // --- Zero-Cost Feature 6: Rich WhatsApp / SMS Emergency Card Formatter ---
+  String formatEmergencyShareMessage(Map<String, dynamic> req) {
+    final bg = (req['blood_type'] ?? 'Urgent').toString();
+    final comp = (req['blood_component'] ?? 'Whole Blood').toString();
+    final hospital = (req['hospital_name'] ?? 'Hospital').toString();
+    final city = (req['city'] ?? '').toString();
+    final urgency = (req['urgency'] ?? 'High').toString().toUpperCase();
+    final units = (req['units'] ?? 1).toString();
+    final fulfilled = (req['units_fulfilled'] ?? 0).toString();
+    final patient = (req['patient_name'] ?? 'Emergency Patient').toString();
+    final phone = (req['contact_phone'] ?? '').toString();
+    final reqId = (req['id'] ?? '').toString();
+
+    return '🚨 *URGENT $bg ($comp) BLOOD NEEDED* 🚨\n'
+        '━━━━━━━━━━━━━━━━━━━━\n'
+        '🩸 *Blood Group:* $bg ($comp)\n'
+        '⚡ *Priority:* $urgency ($fulfilled/$units Units Fulfilled)\n'
+        '🏥 *Hospital:* $hospital${city.isNotEmpty ? ', $city' : ''}\n'
+        '👤 *Patient:* $patient\n'
+        '${phone.isNotEmpty ? '📞 *Contact:* $phone\n' : ''}'
+        '⚕️ *Note:* Hospital cross-matching required before transfusion.\n'
+        '━━━━━━━━━━━━━━━━━━━━\n'
+        '🔗 Respond on *RedCellNet LifePulse*${reqId.isNotEmpty ? ' (Ref: #${reqId.substring(0, reqId.length > 8 ? 8 : reqId.length)})' : ''}';
+  }
+
+  // --- Zero-Cost Feature 7: Client-Side Trigram / Fuzzy Search ---
+  /// Returns a similarity score between 0.0 and 1.0 for typo-tolerant search.
+  static double fuzzyMatchScore(String source, String query) {
+    final s = source.toLowerCase().trim();
+    final q = query.toLowerCase().trim();
+    if (q.isEmpty) return 1.0;
+    if (s.isEmpty) return 0.0;
+    if (s == q) return 1.0;
+    if (s.contains(q)) return 0.92;
+
+    // Token prefix / substring match
+    final qTokens = q.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+    if (qTokens.length > 1 && qTokens.every((t) => s.contains(t))) {
+      return 0.88;
+    }
+
+    // Character 3-gram (trigram) Jaccard similarity (mirrors Postgres pg_trgm)
+    Set<String> trigrams(String input) {
+      final padded = '  $input ';
+      final out = <String>{};
+      for (int i = 0; i <= padded.length - 3; i++) {
+        out.add(padded.substring(i, i + 3));
+      }
+      return out;
+    }
+
+    final sTri = trigrams(s);
+    final qTri = trigrams(q);
+    if (sTri.isEmpty || qTri.isEmpty) return 0.0;
+    final intersection = sTri.intersection(qTri).length;
+    final union = sTri.union(qTri).length;
+    final jaccard = union == 0 ? 0.0 : intersection / union;
+    final queryCoverage = intersection / qTri.length;
+    return jaccard > queryCoverage * 0.75 ? jaccard : queryCoverage * 0.75;
+  }
+
+  // --- Zero-Cost Feature 8: Deterministic Referral Code ---
+  static String generateReferralCode({
+    String? userId,
+    String? fullName,
+    String? bloodGroup,
+  }) {
+    final cleanBg = (bloodGroup ?? '')
+        .toUpperCase()
+        .replaceAll('+', 'P')
+        .replaceAll('-', 'N')
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    final rawSeed = (userId != null && userId.trim().isNotEmpty)
+        ? userId.trim().replaceAll('-', '').toUpperCase()
+        : (fullName ?? 'DONOR').replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    final suffix = rawSeed.length >= 4
+        ? rawSeed.substring(0, 4)
+        : rawSeed.padRight(4, 'X');
+    return 'RCN-${cleanBg.isNotEmpty ? '$cleanBg-' : ''}$suffix';
+  }
+
   // --- English & Bengali Dictionary ---
   static const Map<String, String> _bnDictionary = {
     // Navigation
@@ -206,6 +613,7 @@ class AppSettingsService {
     'Skip': 'এড়িয়ে যান',
     'Next': 'পরবর্তী',
     'Get Started': 'শুরু করুন',
+    'Browse Emergency Feed as Guest': 'গেস্ট হিসেবে জরুরি আবেদন দেখুন',
 
     // Home & Availability
     'Post Blood Request': 'রক্তের আবেদন করুন',
@@ -222,6 +630,10 @@ class AppSettingsService {
     'Compatibility': 'রক্তের সামঞ্জস্যতা',
     'Emergency Feed': 'জরুরি আবেদনসমূহ',
     'See All': 'সব দেখুন',
+    'Compatible with Me': 'আমার রক্তের সাথে সামঞ্জস্যপূর্ণ',
+    'Blood Camps': 'রক্তদান ক্যাম্প',
+    'Health Journal': 'হিমোগ্লোবিন ও স্বাস্থ্য ডায়েরি',
+    'Top Heroes': 'সেরা রক্তদাতা',
 
     // Blood Requests & Fulfillment
     'Blood Requests': 'রক্তের আবেদনসমূহ',

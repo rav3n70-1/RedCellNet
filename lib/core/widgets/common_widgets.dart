@@ -1,17 +1,226 @@
 // lib/core/widgets/common_widgets.dart
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:red_cell_net_final/core/services/app_settings_service.dart';
+import 'package:red_cell_net_final/core/services/push_notification_service.dart';
 import 'package:red_cell_net_final/core/theme/app_theme.dart';
+import 'package:red_cell_net_final/core/utils/blood_compatibility.dart';
 import 'package:red_cell_net_final/features/notifications/data/services/notification_service.dart';
 import 'package:red_cell_net_final/features/notifications/presentation/pages/notifications_page.dart';
 import 'package:red_cell_net_final/features/blood_requests/data/services/request_service.dart';
+import 'package:red_cell_net_final/features/profile/data/services/user_profile_service.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// Custom vector-rendered RedCellNet "LifePulse" Brand Logo.
+/// Combines a 3D-graded arterial crimson blood droplet, glowing ECG lifeline wave,
+/// geometric medical cross, and interconnected donor network nodes.
+class RedCellNetLogo extends StatelessWidget {
+  final double size;
+  final bool showPulseGlow;
+  final bool isMonochromeWhite;
+
+  const RedCellNetLogo({
+    super.key,
+    this.size = 56.0,
+    this.showPulseGlow = true,
+    this.isMonochromeWhite = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'RedCellNet LifePulse Logo',
+      image: true,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: isMonochromeWhite
+              ? LinearGradient(
+                  colors: [
+                    Colors.white.withValues(alpha: 0.22),
+                    Colors.white.withValues(alpha: 0.08),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : const RadialGradient(
+                  center: Alignment(-0.2, -0.25),
+                  radius: 0.95,
+                  colors: [
+                    Color(0xFF2A0915),
+                    Color(0xFF14050B),
+                    Color(0xFF090B12),
+                  ],
+                ),
+          border: Border.all(
+            color: isMonochromeWhite
+                ? Colors.white.withValues(alpha: 0.32)
+                : const Color(0xFFF41C47).withValues(alpha: 0.45),
+            width: size * 0.032,
+          ),
+          boxShadow: showPulseGlow
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFF41C47).withValues(alpha: 0.35),
+                    blurRadius: size * 0.35,
+                    spreadRadius: size * 0.02,
+                    offset: Offset(0, size * 0.08),
+                  ),
+                ]
+              : null,
+        ),
+        child: CustomPaint(
+          size: Size.square(size),
+          painter: _RedCellNetLogoPainter(
+            isMonochromeWhite: isMonochromeWhite,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RedCellNetLogoPainter extends CustomPainter {
+  final bool isMonochromeWhite;
+
+  const _RedCellNetLogoPainter({this.isMonochromeWhite = false});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final cx = w * 0.5;
+
+    // 1. Blood Drop Silhouette Path
+    final dropPath = Path()
+      ..moveTo(cx, h * 0.14)
+      ..cubicTo(
+        w * 0.68,
+        h * 0.36,
+        w * 0.80,
+        h * 0.52,
+        w * 0.80,
+        h * 0.64,
+      )
+      ..arcToPoint(
+        Offset(w * 0.20, h * 0.64),
+        radius: Radius.circular(w * 0.30),
+        clockwise: true,
+      )
+      ..cubicTo(
+        w * 0.20,
+        h * 0.52,
+        w * 0.32,
+        h * 0.36,
+        cx,
+        h * 0.14,
+      )
+      ..close();
+
+    final dropPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFFFF3358),
+          Color(0xFFD9143C),
+          Color(0xFF8A0A25),
+        ],
+        stops: [0.0, 0.55, 1.0],
+      ).createShader(Rect.fromLTWH(0, 0, w, h));
+
+    canvas.drawPath(dropPath, dropPaint);
+
+    // 2. Specular 3D Left Rim Highlight
+    final highlightPath = Path()
+      ..moveTo(cx * 0.92, h * 0.24)
+      ..quadraticBezierTo(w * 0.28, h * 0.50, w * 0.30, h * 0.68);
+    final highlightPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.38)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.038
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(highlightPath, highlightPaint);
+
+    // 3. Subtle Geometric Medical Cross inside upper-right of drop
+    final crossColor = Colors.white.withValues(alpha: 0.92);
+    final crossPaint = Paint()..color = crossColor;
+    final crossCx = w * 0.58;
+    final crossCy = h * 0.45;
+    final armL = w * 0.13;
+    final armT = w * 0.048;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(crossCx, crossCy), width: armL, height: armT),
+        Radius.circular(w * 0.012),
+      ),
+      crossPaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(crossCx, crossCy), width: armT, height: armL),
+        Radius.circular(w * 0.012),
+      ),
+      crossPaint,
+    );
+
+    // 4. Connected Donor Network Nodes
+    final nodePaint = Paint()
+      ..color = const Color(0xFFFDA4AF).withValues(alpha: 0.70)
+      ..strokeWidth = w * 0.014;
+    final p1 = Offset(w * 0.36, h * 0.46);
+    final p2 = Offset(w * 0.45, h * 0.37);
+    final p3 = Offset(w * 0.66, h * 0.68);
+    canvas.drawLine(p1, p2, nodePaint);
+    canvas.drawCircle(p1, w * 0.022, Paint()..color = Colors.white.withValues(alpha: 0.85));
+    canvas.drawCircle(p2, w * 0.020, Paint()..color = const Color(0xFFFDA4AF));
+    canvas.drawCircle(p3, w * 0.020, Paint()..color = const Color(0xFFFDA4AF));
+
+    // 5. Glowing ECG Heartbeat Lifeline Wave across the droplet
+    final ecgPath = Path()
+      ..moveTo(w * 0.21, h * 0.62)
+      ..lineTo(w * 0.33, h * 0.62)
+      ..lineTo(w * 0.37, h * 0.55)
+      ..lineTo(w * 0.41, h * 0.67)
+      ..lineTo(w * 0.46, h * 0.42)
+      ..lineTo(w * 0.51, h * 0.74)
+      ..lineTo(w * 0.56, h * 0.59)
+      ..lineTo(w * 0.61, h * 0.62)
+      ..lineTo(w * 0.79, h * 0.62);
+
+    final ecgGlowPaint = Paint()
+      ..color = const Color(0xFFFFB4C2).withValues(alpha: 0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.06
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(ecgPath, ecgGlowPaint);
+
+    final ecgPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.032
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(ecgPath, ecgPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RedCellNetLogoPainter oldDelegate) =>
+      oldDelegate.isMonochromeWhite != isMonochromeWhite;
+}
 
 /// Clean, visually striking badge for displaying Blood Types (A+, O-, AB+, etc.)
 class BloodGroupBadge extends StatelessWidget {
@@ -2072,7 +2281,9 @@ class LifeSaverTracker extends StatelessWidget {
   }
 }
 
-/// Interactive 3D Flippable Digital Donor Pass Card (Apple/Google Wallet Style).
+/// Interactive 3D Flippable Digital Donor Pass Card (Apple/Google Wallet Style)
+/// with Tier Color Grading, Holographic Sheen, Multi-Tab Back Face, Fullscreen QR,
+/// Medical Streak Freeze, Referral Code, and PNG Pass Image Export.
 class DigitalPassCard extends StatefulWidget {
   final String donorName;
   final String bloodType;
@@ -2083,6 +2294,20 @@ class DigitalPassCard extends StatefulWidget {
   final String lastDonationDate;
   final String nextEligibleDate;
   final String emergencyContact;
+
+  // Upgraded Zero-Cost Pass Features (optional for backward compatibility)
+  final int points;
+  final int streakCount;
+  final bool isStreakFrozen;
+  final String? streakFreezeReason;
+  final bool isEligible;
+  final int daysUntilEligible;
+  final String? city;
+  final bool isPhoneVerified;
+  final String? medicalNotes;
+  final String? referralCode;
+  final bool showActionDock;
+  final ValueChanged<bool>? onStreakFreezeChanged;
 
   const DigitalPassCard({
     super.key,
@@ -2095,6 +2320,18 @@ class DigitalPassCard extends StatefulWidget {
     required this.lastDonationDate,
     required this.nextEligibleDate,
     required this.emergencyContact,
+    this.points = 0,
+    this.streakCount = 0,
+    this.isStreakFrozen = false,
+    this.streakFreezeReason,
+    this.isEligible = true,
+    this.daysUntilEligible = 0,
+    this.city,
+    this.isPhoneVerified = false,
+    this.medicalNotes,
+    this.referralCode,
+    this.showActionDock = false,
+    this.onStreakFreezeChanged,
   });
 
   @override
@@ -2103,21 +2340,35 @@ class DigitalPassCard extends StatefulWidget {
 
 class _DigitalPassCardState extends State<DigitalPassCard>
     with SingleTickerProviderStateMixin {
+  final GlobalKey _repaintBoundaryKey = GlobalKey();
   late AnimationController _flipController;
   late Animation<double> _flipAnimation;
   bool _isFront = true;
+  int _backSubTab = 0; // 0: QR & Medical, 1: Compatibility, 2: Perks & Notes
+  bool _isExportingImage = false;
+  late bool _localStreakFrozen;
 
   @override
   void initState() {
     super.initState();
+    _localStreakFrozen =
+        widget.isStreakFrozen || AppSettingsService().isStreakFrozen;
     _flipController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 550),
+      duration: const Duration(milliseconds: 560),
     );
 
     _flipAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _flipController, curve: Curves.easeInOutCubic),
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant DigitalPassCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isStreakFrozen != widget.isStreakFrozen) {
+      _localStreakFrozen = widget.isStreakFrozen;
+    }
   }
 
   @override
@@ -2133,231 +2384,784 @@ class _DigitalPassCardState extends State<DigitalPassCard>
     } else {
       _flipController.reverse();
     }
-    _isFront = !_isFront;
+    setState(() {
+      _isFront = !_isFront;
+    });
+  }
+
+  String get _tierLabel {
+    if (_localStreakFrozen) return 'MEDICAL FREEZE';
+    if (widget.totalDonations >= 5 || widget.points >= 500) {
+      return 'GOLD GUARDIAN';
+    }
+    if (widget.totalDonations >= 2 || widget.points >= 200) {
+      return 'SILVER HERO';
+    }
+    if (widget.totalDonations >= 1 || widget.isVerified) {
+      return 'VERIFIED LIFESAVER';
+    }
+    return 'LIFEPULSE PASS';
+  }
+
+  LinearGradient get _frontGradient {
+    if (_localStreakFrozen) return AppColors.passFrozenGradient;
+    if (widget.totalDonations >= 5 || widget.points >= 500) {
+      return AppColors.passGoldGuardianGradient;
+    }
+    if (widget.totalDonations >= 2 || widget.points >= 200) {
+      return AppColors.passSilverHeroGradient;
+    }
+    return AppColors.passCrimsonGradient;
+  }
+
+  Color get _tierGlowColor {
+    if (_localStreakFrozen) return AppColors.freezeIce;
+    if (widget.totalDonations >= 5 || widget.points >= 500) {
+      return AppColors.imperialGold;
+    }
+    if (widget.totalDonations >= 2 || widget.points >= 200) {
+      return AppColors.secondary;
+    }
+    return AppColors.primaryAccent;
+  }
+
+  String get _effectiveReferralCode {
+    if (widget.referralCode != null && widget.referralCode!.trim().isNotEmpty) {
+      return widget.referralCode!.trim();
+    }
+    return AppSettingsService.generateReferralCode(
+      userId: widget.donorId,
+      fullName: widget.donorName,
+      bloodGroup: widget.bloodType,
+    );
+  }
+
+  String get _qrPayload =>
+      'REDCELLNET|ID:${widget.donorId}|BG:${widget.bloodType.isNotEmpty ? widget.bloodType : "UNSET"}|VERIFIED:${widget.isVerified}|TIER:$_tierLabel|DONATIONS:${widget.totalDonations}';
+
+  Future<void> _exportAndSharePassImage() async {
+    if (_isExportingImage) return;
+    setState(() => _isExportingImage = true);
+    try {
+      HapticFeedback.lightImpact();
+      final boundary = _repaintBoundaryKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final ByteData? byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      if (byteData == null) return;
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
+      final xFile = XFile.fromData(
+        pngBytes,
+        mimeType: 'image/png',
+        name: 'RedCellNet_Donor_Pass_${widget.donorId}.png',
+      );
+      await Share.shareXFiles(
+        [xFile],
+        text:
+            '🩸 My Official RedCellNet Digital Donor Pass (${widget.bloodType.trim().isNotEmpty ? widget.bloodType.trim() : "Community Member"}) • Invite Code: $_effectiveReferralCode',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not export pass image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExportingImage = false);
+    }
+  }
+
+  void _openFullscreenQrModal() {
+    HapticFeedback.selectionClick();
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: const Color(0xFF0B1120),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      RedCellNetLogo(size: 32, showPulseGlow: false),
+                      SizedBox(width: 10),
+                      Text(
+                        'HOSPITAL CHECK-IN QR',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _tierGlowColor.withValues(alpha: 0.35),
+                      blurRadius: 24,
+                    ),
+                  ],
+                ),
+                child: QrImageView(
+                  data: _qrPayload,
+                  version: QrVersions.auto,
+                  size: 210,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                widget.donorName.isNotEmpty
+                    ? widget.donorName.toUpperCase()
+                    : 'COMMUNITY MEMBER',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'ID: ${widget.donorId} • Blood Group: ${widget.bloodType.trim().isNotEmpty ? widget.bloodType.trim() : "Unset"}',
+                style: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  widget.isVerified
+                      ? '✓ Verified Lab Credential on File'
+                      : '⚠ Self-Reported • Mandatory Hospital Cross-Match Required',
+                  style: TextStyle(
+                    color: widget.isVerified
+                        ? const Color(0xFF34D399)
+                        : const Color(0xFFFCD34D),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMedicalStreakFreezeDialog() async {
+    final nextState = !_localStreakFrozen;
+    String selectedReason = 'Temporary Illness / Fever Recovery';
+    final reasons = <String>[
+      'Temporary Illness / Fever Recovery',
+      'Low Hemoglobin / Iron Supplementation',
+      'Recent Dental / Minor Medical Procedure',
+      'Pregnancy / Postpartum Deferral',
+      'Vaccination / Travel Deferral',
+    ];
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                nextState ? Icons.ac_unit_rounded : Icons.local_fire_department_rounded,
+                color: nextState ? AppColors.freezeIce : AppColors.warning,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  nextState
+                      ? 'Activate Medical Streak Freeze'
+                      : 'Resume Active Donor Streak',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                nextState
+                    ? 'Never lose your donation streak due to health or medical deferrals. Freezing pauses streak decay while prioritizing your clinical safety.'
+                    : 'Your medical deferral freeze will be lifted and your normal donation streak counter will resume.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondaryOf(ctx),
+                  height: 1.4,
+                ),
+              ),
+              if (nextState) ...[
+                const SizedBox(height: 14),
+                const Text(
+                  'Deferral Reason (Private):',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedReason,
+                  isExpanded: true,
+                  items: reasons
+                      .map((r) => DropdownMenuItem(
+                            value: r,
+                            child: Text(
+                              r,
+                              style: const TextStyle(fontSize: 12.5),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => selectedReason = v);
+                  },
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    nextState ? AppColors.secondary : AppColors.primary,
+              ),
+              child: Text(nextState ? 'Freeze Streak ❄️' : 'Resume Streak 🔥'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      await AppSettingsService().setStreakFreezeState(
+        nextState,
+        reason: nextState ? selectedReason : null,
+      );
+      if (mounted) {
+        setState(() => _localStreakFrozen = nextState);
+      }
+      widget.onStreakFreezeChanged?.call(nextState);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _flipCard,
-      child: AnimatedBuilder(
-        animation: _flipAnimation,
-        builder: (context, child) {
-          final angle = _flipAnimation.value * math.pi;
-          final isUnder = angle > (math.pi / 2);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final cardWidget = RepaintBoundary(
+      key: _repaintBoundaryKey,
+      child: Semantics(
+        button: true,
+        label:
+            'RedCellNet Digital Donor Pass for ${widget.donorName}. Blood Group ${widget.bloodType.trim().isNotEmpty ? widget.bloodType.trim() : "Unset"}. Tap to flip card.',
+        child: GestureDetector(
+          onTap: _flipCard,
+          child: AnimatedBuilder(
+            animation: _flipAnimation,
+            builder: (context, child) {
+              final angle =
+                  (reduceMotion ? (_isFront ? 0.0 : 1.0) : _flipAnimation.value) *
+                      math.pi;
+              final isUnder = angle > (math.pi / 2);
 
-          return Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.0012)
-              ..rotateY(angle),
-            child: isUnder
-                ? Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()..rotateY(math.pi),
-                    child: _buildBackFace(),
-                  )
-                : _buildFrontFace(),
-          );
-        },
+              return Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.0011)
+                  ..rotateY(angle),
+                child: isUnder
+                    ? Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()..rotateY(math.pi),
+                        child: _buildBackFace(),
+                      )
+                    : _buildFrontFace(),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    if (!widget.showActionDock) {
+      return cardWidget;
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        cardWidget,
+        const SizedBox(height: 12),
+        _buildActionDock(context),
+      ],
+    );
+  }
+
+  Widget _buildActionDock(BuildContext context) {
+    final isDark = AppColors.isDark(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppColors.darkSurface.withValues(alpha: 0.92)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.borderOf(context)),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildDockAction(
+            icon: _isExportingImage
+                ? Icons.hourglass_top_rounded
+                : Icons.ios_share_rounded,
+            label: 'Share PNG',
+            color: AppColors.primary,
+            onTap: _exportAndSharePassImage,
+          ),
+          _buildDockAction(
+            icon: Icons.qr_code_scanner_rounded,
+            label: 'Hospital QR',
+            color: AppColors.secondary,
+            onTap: _openFullscreenQrModal,
+          ),
+          _buildDockAction(
+            icon: _localStreakFrozen
+                ? Icons.ac_unit_rounded
+                : Icons.local_fire_department_rounded,
+            label: _localStreakFrozen ? 'Frozen ❄️' : 'Streak Freeze',
+            color: _localStreakFrozen ? AppColors.freezeIce : AppColors.warning,
+            onTap: _showMedicalStreakFreezeDialog,
+          ),
+          _buildDockAction(
+            icon: Icons.card_giftcard_rounded,
+            label: _effectiveReferralCode,
+            color: AppColors.vitalEmerald,
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: _effectiveReferralCode));
+              HapticFeedback.selectionClick();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'Referral code $_effectiveReferralCode copied! Share with fellow donors.'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDockAction({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 17, color: color),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimaryOf(context),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildFrontFace() {
+    final hasBg = widget.bloodType.trim().isNotEmpty;
+    final effectiveStreak = widget.streakCount > 0
+        ? widget.streakCount
+        : (widget.totalDonations > 0 ? 1 : 0);
+
     return Container(
       width: double.infinity,
-      height: 220,
-      padding: const EdgeInsets.all(22),
+      height: 238,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF881337), // Rose 900
-            Color(0xFF4C0519), // Rose 950
-            Color(0xFF0F172A), // Slate 900
-          ],
-        ),
+        gradient: _frontGradient,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.15),
+          color: Colors.white.withValues(alpha: 0.18),
           width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFE11D48).withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: _tierGlowColor.withValues(alpha: 0.28),
+            blurRadius: 22,
+            offset: const Offset(0, 9),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Top Row: Brand & Blood Group Badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.favorite_rounded,
-                        color: Color(0xFFF43F5E),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "REDCELLNET",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1.2,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          children: [
+            // Holographic Iridescent Sheen + Subtle ECG Lifeline Watermark
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: AppColors.holographicSheenGradient,
+                  ),
+                  child: CustomPaint(
+                    painter: _PassEcgWatermarkPainter(),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Top Row: Brand Logo, Tier Pill & Blood Group Badge
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const RedCellNetLogo(
+                              size: 38,
+                              showPulseGlow: false,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Flexible(
+                                        child: Text(
+                                          "REDCELLNET",
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 1.2,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.14),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          _tierLabel,
+                                          style: const TextStyle(
+                                            color: Color(0xFFFDE68A),
+                                            fontSize: 7.5,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.6,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  const Text(
+                                    "OFFICIAL DIGITAL DONOR PASS",
+                                    style: TextStyle(
+                                      color: Color(0xFFFDA4AF),
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.8,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: hasBg
+                              ? const Color(0xFFE11D48)
+                              : Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            width: 1,
                           ),
-                          Text(
-                            "OFFICIAL DIGITAL DONOR PASS",
-                            style: TextStyle(
-                              color: Color(0xFFFDA4AF),
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
+                          boxShadow: hasBg
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFFE11D48)
+                                        .withValues(alpha: 0.45),
+                                    blurRadius: 12,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Text(
+                          hasBg ? widget.bloodType.trim() : 'Unset',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: hasBg ? 18 : 13,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Middle: Donor Name, Verification, Streak Pill & ID
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.donorName.isNotEmpty
+                                  ? widget.donorName.toUpperCase()
+                                  : "COMMUNITY MEMBER",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 17.5,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (widget.isVerified) ...[
+                            const SizedBox(width: 6),
+                            const Icon(
+                              Icons.verified_rounded,
+                              color: Color(0xFF34D399),
+                              size: 18,
+                            ),
+                          ],
+                          if (widget.isPhoneVerified) ...[
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.phonelink_ring_rounded,
+                              color: Color(0xFF38BDF8),
+                              size: 15,
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: GestureDetector(
+                              onTap: () {
+                                if (widget.donorId.isNotEmpty) {
+                                  Clipboard.setData(
+                                      ClipboardData(text: widget.donorId));
+                                  HapticFeedback.selectionClick();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content:
+                                          Text('Donor ID copied to clipboard'),
+                                      duration: Duration(seconds: 1),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Text(
+                                "ID: ${widget.donorId.isNotEmpty ? widget.donorId : 'UNASSIGNED'}",
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.72),
+                                  fontSize: 10.5,
+                                  fontFamily: 'monospace',
+                                  letterSpacing: 0.9,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: (widget.isEligible &&
+                                      widget.daysUntilEligible <= 0)
+                                  ? const Color(0xFF10B981)
+                                      .withValues(alpha: 0.25)
+                                  : const Color(0xFFF59E0B)
+                                      .withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: (widget.isEligible &&
+                                        widget.daysUntilEligible <= 0)
+                                    ? const Color(0xFF34D399)
+                                    : const Color(0xFFFBBF24),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              (widget.isEligible &&
+                                      widget.daysUntilEligible <= 0)
+                                  ? '● READY'
+                                  : '⏳ ${widget.daysUntilEligible}d REST',
+                              style: TextStyle(
+                                color: (widget.isEligible &&
+                                        widget.daysUntilEligible <= 0)
+                                    ? const Color(0xFF6EE7B7)
+                                    : const Color(0xFFFDE68A),
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _localStreakFrozen
+                                  ? const Color(0xFF0EA5E9)
+                                      .withValues(alpha: 0.28)
+                                  : Colors.white.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _localStreakFrozen
+                                  ? '❄️ FROZEN'
+                                  : '🔥 $effectiveStreak STREAK',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: widget.bloodType.trim().isNotEmpty
-                      ? const Color(0xFFE11D48)
-                      : Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: widget.bloodType.trim().isNotEmpty
-                      ? [
-                          BoxShadow(
-                            color:
-                                const Color(0xFFE11D48).withValues(alpha: 0.4),
-                            blurRadius: 10,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Text(
-                  widget.bloodType.trim().isNotEmpty
-                      ? widget.bloodType.trim()
-                      : 'Unset',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: widget.bloodType.trim().isNotEmpty ? 18 : 13,
-                    fontWeight: FontWeight.w900,
+                    ],
                   ),
-                ),
-              ),
-            ],
-          ),
 
-          // Middle: Donor Name & ID
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.donorName.isNotEmpty
-                          ? widget.donorName.toUpperCase()
-                          : "COMMUNITY MEMBER",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
+                  // Bottom Stats: Donations, Lives Saved, Points & Tap to Flip hint
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildStatBadge(
+                                "DONATIONS", "${widget.totalDonations}"),
+                            const SizedBox(width: 8),
+                            _buildStatBadge(
+                                "LIVES SAVED", "up to ${widget.livesSaved}"),
+                            if (widget.points > 0) ...[
+                              const SizedBox(width: 8),
+                              _buildStatBadge("IMPACT", "${widget.points} pts"),
+                            ],
+                          ],
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (widget.isVerified) ...[
-                    const SizedBox(width: 6),
-                    const Icon(
-                      Icons.verified_rounded,
-                      color: Color(0xFF34D399),
-                      size: 18,
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                "ID: ${widget.donorId.isNotEmpty ? widget.donorId : 'UNASSIGNED'}",
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.65),
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  letterSpacing: 1.0,
-                ),
-              ),
-            ],
-          ),
-
-          // Bottom Stats: Donations, Lives Saved & Tap to Flip hint
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  _buildStatBadge("DONATIONS", "${widget.totalDonations}"),
-                  const SizedBox(width: 12),
-                  _buildStatBadge("LIVES SAVED", "up to ${widget.livesSaved}"),
-                ],
-              ),
-              Row(
-                children: [
-                  Text(
-                    "TAP TO FLIP",
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.55),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.flip_rounded,
-                    size: 14,
-                    color: Colors.white.withValues(alpha: 0.55),
+                      Row(
+                        children: [
+                          Text(
+                            "TAP TO FLIP",
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.65),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.flip_rounded,
+                            size: 13,
+                            color: Colors.white.withValues(alpha: 0.65),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2365,26 +3169,26 @@ class _DigitalPassCardState extends State<DigitalPassCard>
   Widget _buildBackFace() {
     return Container(
       width: double.infinity,
-      height: 220,
-      padding: const EdgeInsets.all(22),
+      height: 238,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF0F172A), // Slate 900
-            Color(0xFF1E293B), // Slate 800
-            Color(0xFF111827), // Gray 900
+            Color(0xFF080D1A),
+            Color(0xFF141E33),
+            Color(0xFF0B1120),
           ],
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.15),
+          color: Colors.white.withValues(alpha: 0.16),
           width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
+            color: Colors.black.withValues(alpha: 0.38),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -2394,74 +3198,49 @@ class _DigitalPassCardState extends State<DigitalPassCard>
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // Top Header + Interactive Mini Sub-Tabs on Back Face
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                "MEDICAL & EMERGENCY CREDENTIALS",
-                style: TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
+              const Flexible(
+                child: Text(
+                  "MEDICAL & EMERGENCY CREDENTIALS",
+                  style: TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.7,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Icon(
-                Icons.qr_code_2_rounded,
-                color: Colors.white.withValues(alpha: 0.7),
-                size: 24,
-              ),
-            ],
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildBackInfoItem(
-                      "LAST DONATION",
-                      widget.lastDonationDate.isNotEmpty
-                          ? widget.lastDonationDate
-                          : "No donations logged",
-                    ),
-                    const SizedBox(height: 10),
-                    _buildBackInfoItem(
-                      "NEXT ELIGIBILITY",
-                      widget.nextEligibleDate.isNotEmpty
-                          ? widget.nextEligibleDate
-                          : "Eligible Now",
-                    ),
-                    const SizedBox(height: 10),
-                    _buildBackInfoItem(
-                      "EMERGENCY CONTACT",
-                      widget.emergencyContact.isNotEmpty
-                          ? widget.emergencyContact
-                          : "Not specified",
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                width: 78,
-                height: 78,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: QrImageView(
-                  data:
-                      'REDCELLNET|ID:${widget.donorId}|BG:${widget.bloodType.isNotEmpty ? widget.bloodType : "UNSET"}|VERIFIED:${widget.isVerified}',
-                  version: QrVersions.auto,
-                  padding: EdgeInsets.zero,
-                  backgroundColor: Colors.white,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildBackTabPill(0, 'QR & Info'),
+                  const SizedBox(width: 4),
+                  _buildBackTabPill(1, 'Match'),
+                  const SizedBox(width: 4),
+                  _buildBackTabPill(2, 'Perks'),
+                ],
               ),
             ],
           ),
+
+          // Dynamic Back Body based on selected sub-tab
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: _backSubTab == 0
+                  ? _buildBackQrAndMedicalTab()
+                  : _backSubTab == 1
+                      ? _buildBackCompatibilityTab()
+                      : _buildBackPerksTab(),
+            ),
+          ),
+
+          // Footer: Verification Status & Flip Back
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -2506,11 +3285,156 @@ class _DigitalPassCardState extends State<DigitalPassCard>
     );
   }
 
+  Widget _buildBackTabPill(int index, String title) {
+    final active = _backSubTab == index;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _backSubTab = index);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: active
+              ? AppColors.primaryAccent
+              : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          title,
+          style: TextStyle(
+            color: active ? Colors.white : const Color(0xFF94A3B8),
+            fontSize: 8.5,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackQrAndMedicalTab() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildBackInfoItem(
+                "LAST DONATION",
+                widget.lastDonationDate.isNotEmpty
+                    ? widget.lastDonationDate
+                    : "No donations logged",
+              ),
+              _buildBackInfoItem(
+                "NEXT ELIGIBILITY",
+                widget.nextEligibleDate.isNotEmpty
+                    ? widget.nextEligibleDate
+                    : "Eligible Now",
+              ),
+              _buildBackInfoItem(
+                "EMERGENCY CONTACT",
+                widget.emergencyContact.isNotEmpty
+                    ? widget.emergencyContact
+                    : "Not specified",
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        GestureDetector(
+          onTap: _openFullscreenQrModal,
+          child: Container(
+            width: 80,
+            height: 80,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: QrImageView(
+              data: _qrPayload,
+              version: QrVersions.auto,
+              padding: EdgeInsets.zero,
+              backgroundColor: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBackCompatibilityTab() {
+    final bg = widget.bloodType.trim().toUpperCase();
+    final donateTo = BloodCompatibility.canDonateTo(bg);
+    final receiveFrom = BloodCompatibility.canReceiveFrom(bg);
+
+    if (bg.isEmpty || donateTo.isEmpty) {
+      return const Center(
+        child: Text(
+          'Set your blood group in Profile to view instant RBC & Plasma compatibility rules on your pass.',
+          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _buildBackInfoItem(
+          'CAN DONATE RED CELLS TO (${donateTo.length} GROUPS)',
+          donateTo.join('  •  '),
+        ),
+        _buildBackInfoItem(
+          'CAN RECEIVE RED CELLS FROM (${receiveFrom.length} GROUPS)',
+          receiveFrom.join('  •  '),
+        ),
+        _buildBackInfoItem(
+          'CLINICAL ROLE',
+          bg == 'O-'
+              ? 'Universal Red Cell Donor (Emergency Trauma Priority)'
+              : bg == 'AB+'
+                  ? 'Universal Red Cell Recipient & Universal Plasma Donor'
+                  : 'Standard ABO/Rh Type-Specific Donor',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBackPerksTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _buildBackInfoItem(
+          'PERSONAL INVITE & REFERRAL CODE',
+          '$_effectiveReferralCode  (Tap dock below to copy & share)',
+        ),
+        _buildBackInfoItem(
+          'STREAK PROTECTION STATUS',
+          _localStreakFrozen
+              ? '❄️ Medical Freeze Active (${widget.streakFreezeReason ?? "Protected"})'
+              : '🔥 Active Streak Tracking (Medical Freeze Available)',
+        ),
+        _buildBackInfoItem(
+          'MEDICAL NOTES / ALLERGIES',
+          (widget.medicalNotes != null && widget.medicalNotes!.trim().isNotEmpty)
+              ? widget.medicalNotes!.trim()
+              : 'None recorded on pass',
+        ),
+      ],
+    );
+  }
+
   Widget _buildStatBadge(String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
+        color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -2519,8 +3443,8 @@ class _DigitalPassCardState extends State<DigitalPassCard>
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
-              fontSize: 8.5,
+              color: Colors.white.withValues(alpha: 0.65),
+              fontSize: 8,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -2528,7 +3452,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
             value,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -2556,7 +3480,7 @@ class _DigitalPassCardState extends State<DigitalPassCard>
           value,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 12,
+            fontSize: 11.5,
             fontWeight: FontWeight.w700,
           ),
           maxLines: 1,
@@ -2566,3 +3490,1258 @@ class _DigitalPassCardState extends State<DigitalPassCard>
     );
   }
 }
+
+class _PassEcgWatermarkPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.055)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path()
+      ..moveTo(0, size.height * 0.68)
+      ..lineTo(size.width * 0.35, size.height * 0.68)
+      ..lineTo(size.width * 0.42, size.height * 0.52)
+      ..lineTo(size.width * 0.47, size.height * 0.78)
+      ..lineTo(size.width * 0.54, size.height * 0.28)
+      ..lineTo(size.width * 0.60, size.height * 0.84)
+      ..lineTo(size.width * 0.66, size.height * 0.62)
+      ..lineTo(size.width * 0.72, size.height * 0.68)
+      ..lineTo(size.width, size.height * 0.68);
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ============================================================================
+// ZERO-COST UI & FEATURE WIDGETS
+// ============================================================================
+
+/// Shimmer skeleton box that respects Reduce Motion accessibility settings.
+class ShimmerSkeleton extends StatefulWidget {
+  final double width;
+  final double height;
+  final double borderRadius;
+
+  const ShimmerSkeleton({
+    super.key,
+    this.width = double.infinity,
+    required this.height,
+    this.borderRadius = 14,
+  });
+
+  @override
+  State<ShimmerSkeleton> createState() => _ShimmerSkeletonState();
+}
+
+class _ShimmerSkeletonState extends State<ShimmerSkeleton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1300),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = AppColors.isDark(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final baseColor =
+        isDark ? const Color(0xFF1A2336) : const Color(0xFFE2E8F0);
+    final highlightColor =
+        isDark ? const Color(0xFF283550) : const Color(0xFFF1F5F9);
+
+    if (reduceMotion) {
+      return Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          color: baseColor,
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+        ),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return Container(
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: Color.lerp(baseColor, highlightColor, _controller.value),
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Skeleton placeholder matching the geometry of an emergency blood request card.
+class RequestCardSkeleton extends StatelessWidget {
+  const RequestCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceOf(context),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.borderOf(context)),
+      ),
+      child: const Row(
+        children: [
+          ShimmerSkeleton(width: 50, height: 50, borderRadius: 16),
+          SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ShimmerSkeleton(width: 160, height: 15, borderRadius: 6),
+                SizedBox(height: 8),
+                ShimmerSkeleton(width: 220, height: 12, borderRadius: 6),
+                SizedBox(height: 8),
+                ShimmerSkeleton(width: 110, height: 10, borderRadius: 6),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Visual 90-day WHO Recovery Countdown Ring with 1-tap notification reminder.
+class EligibilityCountdownRing extends StatelessWidget {
+  final int daysRemaining;
+  final int totalCooldownDays;
+  final String? bloodType;
+  final DateTime? nextEligibleDate;
+  final double size;
+
+  const EligibilityCountdownRing({
+    super.key,
+    required this.daysRemaining,
+    this.totalCooldownDays = 90,
+    this.bloodType,
+    this.nextEligibleDate,
+    this.size = 64,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final safeTotal = totalCooldownDays <= 0 ? 90 : totalCooldownDays;
+    final clampedRemaining = daysRemaining.clamp(0, safeTotal);
+    final progress =
+        ((safeTotal - clampedRemaining) / safeTotal).clamp(0.0, 1.0);
+    final isReady = clampedRemaining <= 0;
+    final ringColor = isReady ? AppColors.vitalEmerald : AppColors.warning;
+
+    return Semantics(
+      label: isReady
+          ? 'Eligible to donate now, 100 percent recovered'
+          : '$clampedRemaining days remaining in 90 day recovery window',
+      button: true,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          PushNotificationService().showEligibilityCountdownReminder(
+            daysRemaining: clampedRemaining,
+            bloodType: bloodType,
+            nextEligibleDate: nextEligibleDate,
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isReady
+                    ? '🩸 You are 100% ready to donate!'
+                    : '🔔 Recovery reminder armed ($clampedRemaining days remaining).',
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(size),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: size,
+                height: size,
+                child: CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 6,
+                  backgroundColor: ringColor.withValues(alpha: 0.16),
+                  valueColor: AlwaysStoppedAnimation<Color>(ringColor),
+                  strokeCap: StrokeCap.round,
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isReady
+                        ? Icons.check_circle_rounded
+                        : Icons.hourglass_bottom_rounded,
+                    size: size * 0.26,
+                    color: ringColor,
+                  ),
+                  Text(
+                    isReady ? 'READY' : '${clampedRemaining}d',
+                    style: TextStyle(
+                      fontSize: size * 0.17,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimaryOf(context),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shows the Community Leaderboard & Monthly Heroes Bottom Sheet.
+Future<void> showCommunityLeaderboardSheet(
+  BuildContext context, {
+  String? userCity,
+  String? referralCode,
+}) async {
+  final service = UserProfileService();
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      String? filterCity;
+      return StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.82,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceOf(ctx),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.borderOf(ctx),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: AppColors.goldGradient,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.emoji_events_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Community Heroes Leaderboard',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textPrimaryOf(ctx),
+                            ),
+                          ),
+                          Text(
+                            'Privacy-safe anonymized verified lifesavers',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondaryOf(ctx),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (userCity != null && userCity.trim().isNotEmpty)
+                  Row(
+                    children: [
+                      ChoiceChip(
+                        label: const Text('All Bangladesh'),
+                        selected: filterCity == null,
+                        onSelected: (_) =>
+                            setSheetState(() => filterCity = null),
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: Text(userCity),
+                        selected: filterCity == userCity,
+                        onSelected: (_) =>
+                            setSheetState(() => filterCity = userCity),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: service.getCommunityLeaderboard(city: filterCity),
+                    builder: (ctx, snap) {
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return ListView.builder(
+                          itemCount: 4,
+                          itemBuilder: (_, __) => const RequestCardSkeleton(),
+                        );
+                      }
+                      final leaders = snap.data ?? const [];
+                      return ListView.separated(
+                        itemCount: leaders.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (ctx, i) {
+                          final item = leaders[i];
+                          final rank = item['rank'] ?? (i + 1);
+                          final name =
+                              (item['display_name'] ?? 'Lifesaver').toString();
+                          final bg = (item['blood_type'] ?? 'O+').toString();
+                          final city = (item['city'] ?? 'Bangladesh').toString();
+                          final donations = item['total_donations'] ?? 0;
+                          final pts = item['points'] ?? 0;
+                          final tier =
+                              (item['tier'] ?? 'Verified Hero').toString();
+
+                          return Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppColors.mutedOf(ctx),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: i == 0
+                                    ? AppColors.imperialGold
+                                        .withValues(alpha: 0.5)
+                                    : AppColors.borderOf(ctx),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: i == 0
+                                      ? AppColors.imperialGold
+                                      : i == 1
+                                          ? AppColors.secondary
+                                          : AppColors.primary,
+                                  child: Text(
+                                    '#$rank',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              name,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14.5,
+                                                color:
+                                                    AppColors.textPrimaryOf(ctx),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          const Icon(Icons.verified_rounded,
+                                              size: 15,
+                                              color: AppColors.vitalEmerald),
+                                        ],
+                                      ),
+                                      Text(
+                                        '$city • $tier • $donations Donations',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: AppColors.textSecondaryOf(ctx),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                BloodGroupBadge(bloodType: bg, size: 36),
+                                const SizedBox(width: 10),
+                                Text(
+                                  '$pts pts',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.imperialGold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                if (referralCode != null && referralCode.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.diversity_3_rounded,
+                            color: Colors.white),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Invite a Donor • Earn +50 Impact Points',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                              Text(
+                                'Your Code: $referralCode',
+                                style: const TextStyle(
+                                  color: Color(0xFFFDA4AF),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Share.share(
+                              '🩸 Join me on RedCellNet LifePulse — Bangladesh\'s Emergency Blood Donor Network! Use my referral code: $referralCode',
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
+                          ),
+                          child: const Text('Share'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+/// Shows the Blood Camp Calendar & 1-Tap .ics / Google Calendar Export Sheet.
+Future<void> showBloodCampCalendarSheet(BuildContext context) async {
+  final settings = AppSettingsService();
+  final camps = settings.getUpcomingBloodCamps();
+
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(ctx).size.height * 0.82,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceOf(ctx),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.borderOf(ctx),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.event_available_rounded,
+                    color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Upcoming Blood Drives & Camps',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimaryOf(ctx),
+                      ),
+                    ),
+                    Text(
+                      'Export .ics or add directly to Google / Apple Calendar',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondaryOf(ctx),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView.separated(
+              itemCount: camps.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (ctx, i) {
+                final camp = camps[i];
+                final title = camp['title'].toString();
+                final organizer = camp['organizer'].toString();
+                final location = camp['location'].toString();
+                final desc = camp['description'].toString();
+                final start = DateTime.tryParse(camp['start_time'].toString()) ??
+                    DateTime.now().add(const Duration(days: 3));
+                final end = DateTime.tryParse(camp['end_time'].toString()) ??
+                    start.add(const Duration(hours: 5));
+
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.mutedOf(ctx),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.borderOf(ctx)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${start.day}/${start.month}/${start.year}',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              organizer,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textSecondaryOf(ctx),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimaryOf(ctx),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined,
+                              size: 14, color: AppColors.primary),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              location,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondaryOf(ctx),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        desc,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondaryOf(ctx),
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final icsContent =
+                                    settings.generateBloodCampIcs(
+                                  title: title,
+                                  location: location,
+                                  description: desc,
+                                  startTime: start,
+                                  endTime: end,
+                                );
+                                final xFile = XFile.fromData(
+                                  Uint8List.fromList(utf8.encode(icsContent)),
+                                  mimeType: 'text/calendar',
+                                  name: '${camp['id']}.ics',
+                                );
+                                await Share.shareXFiles(
+                                  [xFile],
+                                  text: '📅 $title at $location',
+                                );
+                              },
+                              icon: const Icon(Icons.download_rounded, size: 16),
+                              label: const Text('Export .ics',
+                                  style: TextStyle(fontSize: 12)),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                final gcalUrl = settings.buildGoogleCalendarUrl(
+                                  title: title,
+                                  location: location,
+                                  description: desc,
+                                  startTime: start,
+                                  endTime: end,
+                                );
+                                final uri = Uri.parse(gcalUrl);
+                                await launchUrl(uri,
+                                    mode: LaunchMode.externalApplication);
+                              },
+                              icon: const Icon(Icons.calendar_month_rounded,
+                                  size: 16),
+                              label: const Text('Google Cal',
+                                  style: TextStyle(fontSize: 12)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Shows the Personal Donation & Hemoglobin Health Journal Sheet with PDF Export.
+Future<void> showHealthJournalSheet(
+  BuildContext context, {
+  String? donorName,
+  String? bloodType,
+}) async {
+  final settings = AppSettingsService();
+  final hbController = TextEditingController();
+  final bpController = TextEditingController();
+  final weightController = TextEditingController();
+  final notesController = TextEditingController();
+  bool ironSupplement = false;
+  int feelingRating = 5;
+
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSheetState) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.88,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceOf(ctx),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 14,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: FutureBuilder<List<Map<String, dynamic>>>(
+            future: settings.getHealthJournalEntries(),
+            builder: (ctx, snap) {
+              final entries = snap.data ?? const [];
+              return SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 42,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.borderOf(ctx),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  gradient: AppColors.vitalGradient,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: const Icon(
+                                    Icons.monitor_heart_rounded,
+                                    color: Colors.white,
+                                    size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Hemoglobin & Wellness Journal',
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w900,
+                                        color: AppColors.textPrimaryOf(ctx),
+                                      ),
+                                    ),
+                                    Text(
+                                      'Track Hb (g/dL), BP, weight & iron recovery',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color:
+                                            AppColors.textSecondaryOf(ctx),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (entries.isNotEmpty)
+                          IconButton(
+                            tooltip: 'Export PDF Health Log',
+                            onPressed: () async {
+                              final doc = pw.Document();
+                              doc.addPage(
+                                pw.Page(
+                                  pageFormat: PdfPageFormat.a4,
+                                  build: (pw.Context pCtx) => pw.Column(
+                                    crossAxisAlignment:
+                                        pw.CrossAxisAlignment.start,
+                                    children: [
+                                      pw.Text(
+                                        'RedCellNet — Personal Donor Health & Hemoglobin Log',
+                                        style: pw.TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: pw.FontWeight.bold,
+                                        ),
+                                      ),
+                                      pw.SizedBox(height: 6),
+                                      pw.Text(
+                                          'Donor: ${donorName ?? "Community Donor"} | Blood Group: ${bloodType ?? "Unset"}'),
+                                      pw.Divider(),
+                                      ...entries.map(
+                                        (e) => pw.Padding(
+                                          padding: const pw.EdgeInsets.symmetric(
+                                              vertical: 6),
+                                          child: pw.Text(
+                                            '• Date: ${(e['recorded_at'] ?? '').toString().split('T').first} | Hb: ${e['hemoglobin_g_dl'] ?? '-'} g/dL | BP: ${e['blood_pressure'] ?? '-'} | Weight: ${e['weight_kg'] ?? '-'} kg | Notes: ${e['notes'] ?? ''}',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                              await Printing.layoutPdf(
+                                  onLayout: (_) async => doc.save());
+                            },
+                            icon: const Icon(Icons.picture_as_pdf_rounded,
+                                color: AppColors.primary),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.mutedOf(ctx),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppColors.borderOf(ctx)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Log New Vitals Check',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 13.5),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: hbController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Hb (g/dL)',
+                                    hintText: 'e.g. 14.2',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextField(
+                                  controller: bpController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'BP (mmHg)',
+                                    hintText: '120/80',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextField(
+                                  controller: weightController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Weight (kg)',
+                                    hintText: '68',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: notesController,
+                            decoration: const InputDecoration(
+                              labelText: 'Health / Post-Donation Notes',
+                              hintText:
+                                  'Hydrated well, feeling energetic, or deferral note...',
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                            children: [
+                              FilterChip(
+                                label: const Text('Taking Iron Supplement'),
+                                selected: ironSupplement,
+                                onSelected: (v) => setSheetState(
+                                    () => ironSupplement = v),
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: () async {
+                                  if (hbController.text.trim().isEmpty &&
+                                      bpController.text.trim().isEmpty &&
+                                      notesController.text.trim().isEmpty) {
+                                    return;
+                                  }
+                                  await settings.addHealthJournalEntry({
+                                    'hemoglobin_g_dl':
+                                        hbController.text.trim(),
+                                    'blood_pressure':
+                                        bpController.text.trim(),
+                                    'weight_kg':
+                                        weightController.text.trim(),
+                                    'feeling_rating': feelingRating,
+                                    'iron_supplement': ironSupplement,
+                                    'notes': notesController.text.trim(),
+                                  });
+                                  hbController.clear();
+                                  bpController.clear();
+                                  weightController.clear();
+                                  notesController.clear();
+                                  setSheetState(() {});
+                                },
+                                icon: const Icon(Icons.add_rounded, size: 18),
+                                label: const Text('Save Entry'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Recent Vitals Log (${entries.length})',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: AppColors.textPrimaryOf(ctx),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (entries.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Text(
+                          'No health journal entries yet. WHO recommends Hemoglobin >= 12.5 g/dL (women) and >= 13.0 g/dL (men) before whole blood donation.',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.textSecondaryOf(ctx),
+                          ),
+                        ),
+                      )
+                    else
+                      ...entries.take(8).map((e) {
+                        final id = e['id']?.toString() ?? '';
+                        final dateStr = (e['recorded_at'] ?? '')
+                            .toString()
+                            .split('T')
+                            .first;
+                        final hb = (e['hemoglobin_g_dl'] ?? '').toString();
+                        final bp = (e['blood_pressure'] ?? '').toString();
+                        final wt = (e['weight_kg'] ?? '').toString();
+                        final notes = (e['notes'] ?? '').toString();
+                        final iron = e['iron_supplement'] == true;
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.mutedOf(ctx),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '$dateStr  ${hb.isNotEmpty ? "• Hb: $hb g/dL" : ""}  ${bp.isNotEmpty ? "• BP: $bp" : ""}  ${wt.isNotEmpty ? "• ${wt}kg" : ""}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12.5,
+                                        color: AppColors.textPrimaryOf(ctx),
+                                      ),
+                                    ),
+                                    if (notes.isNotEmpty || iron)
+                                      Text(
+                                        '${iron ? "[Iron Supplement] " : ""}$notes',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: AppColors.textSecondaryOf(
+                                              ctx),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded,
+                                    size: 18),
+                                onPressed: () async {
+                                  await settings.deleteHealthJournalEntry(id);
+                                  setSheetState(() {});
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    ),
+  );
+}
+
+/// Guest Emergency Preview Sheet for Action-First Onboarding / Login (60-Second Value Rule).
+Future<void> showGuestEmergencyPreviewSheet(BuildContext context) async {
+  final settings = AppSettingsService();
+  final cached = await settings.loadCachedEmergencyRequests();
+  final previewList = cached.isNotEmpty
+      ? cached
+      : <Map<String, dynamic>>[
+          {
+            'blood_type': 'O-',
+            'blood_component': 'Whole Blood',
+            'urgency': 'Critical',
+            'hospital_name': 'Dhaka Medical College Hospital (DMCH)',
+            'city': 'Dhaka',
+            'units': 2,
+            'units_fulfilled': 0,
+            'patient_name': 'Emergency Trauma Case',
+          },
+          {
+            'blood_type': 'A+',
+            'blood_component': 'Platelets',
+            'urgency': 'High',
+            'hospital_name': 'Square Hospital Limited',
+            'city': 'Dhaka',
+            'units': 3,
+            'units_fulfilled': 1,
+            'patient_name': 'Dengue Recovery Ward',
+          },
+          {
+            'blood_type': 'B+',
+            'blood_component': 'Red Cells',
+            'urgency': 'High',
+            'hospital_name': 'Chittagong Medical College Hospital',
+            'city': 'Chattogram',
+            'units': 2,
+            'units_fulfilled': 1,
+            'patient_name': 'Thalassemia Care Unit',
+          },
+        ];
+
+  if (!context.mounted) return;
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(ctx).size.height * 0.80,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceOf(ctx),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.borderOf(ctx),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const RedCellNetLogo(size: 38, showPulseGlow: false),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Live Emergency Radar (Guest Preview)',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimaryOf(ctx),
+                      ),
+                    ),
+                    Text(
+                      'Sign in to offer blood, view hospital contacts & unlock your Digital Pass',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textSecondaryOf(ctx),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView.separated(
+              itemCount: previewList.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (ctx, i) {
+                final r = previewList[i];
+                final bg = (r['blood_type'] ?? 'O+').toString();
+                final comp = (r['blood_component'] ?? 'Whole Blood').toString();
+                final hosp = (r['hospital_name'] ?? 'Hospital').toString();
+                final city = (r['city'] ?? 'Dhaka').toString();
+                final urgency = (r['urgency'] ?? 'High').toString();
+
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.mutedOf(ctx),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border(
+                      left: BorderSide(
+                        color: AppColors.urgencyColor(urgency),
+                        width: 4,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      BloodGroupBadge(bloodType: bg, size: 44),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                UrgencyChip(urgency: urgency),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    comp,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textSecondaryOf(ctx),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              hosp,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: AppColors.textPrimaryOf(ctx),
+                              ),
+                            ),
+                            Text(
+                              city,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondaryOf(ctx),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Continue to Sign In / Register'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+

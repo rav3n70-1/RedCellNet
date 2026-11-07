@@ -1,13 +1,14 @@
 {
-    "name": "RedCellNet",
+    "name": "RedCellNet — Emergency Blood & LifePulse Network",
     "short_name": "RedCellNet",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#FAF8F8",
-    "theme_color": "#A41235",
-    "description": "RedCellNet — Emergency Blood Donation & Hospital Fulfillment Network.",
+    "background_color": "#080B13",
+    "theme_color": "#B01032",
+    "description": "RedCellNet — Zero-Latency Emergency Blood Donation, Hospital Fulfillment & Donor LifePulse Network.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "categories": ["medical", "health", "social"],
     "icons": [
         {
             "src": "icons/Icon-192.png",
@@ -30,6 +31,22 @@
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Post Emergency Request",
+            "short_name": "SOS Request",
+            "description": "Broadcast an urgent blood request immediately",
+            "url": "./?action=sos",
+            "icons": [{ "src": "icons/Icon-192.png", "sizes": "192x192" }]
+        },
+        {
+            "name": "View Digital Donor Pass",
+            "short_name": "Donor Pass",
+            "description": "Open your verified scannable donor ID pass",
+            "url": "./?action=pass",
+            "icons": [{ "src": "icons/Icon-192.png", "sizes": "192x192" }]
         }
     ]
 }

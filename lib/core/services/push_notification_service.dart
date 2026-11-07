@@ -9,22 +9,27 @@ import 'package:red_cell_net_final/core/routes/app_routes.dart';
 import 'package:red_cell_net_final/core/utils/blood_compatibility.dart';
 
 class PushNotificationService {
-  static final PushNotificationService _instance = PushNotificationService._internal();
+  static final PushNotificationService _instance =
+      PushNotificationService._internal();
   factory PushNotificationService() => _instance;
   PushNotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
   bool _isInitialized = false;
   GlobalKey<NavigatorState>? _navigatorKey;
 
   // Stream for in-app broadcast alerts
   final StreamController<Map<String, dynamic>> _inAppAlertController =
       StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get onInAppAlertReceived => _inAppAlertController.stream;
+  Stream<Map<String, dynamic>> get onInAppAlertReceived =>
+      _inAppAlertController.stream;
 
   // Tracking last received notification timestamp to avoid duplicate alerts
-  DateTime _lastBroadcastTimestamp = DateTime.now().toUtc().subtract(const Duration(seconds: 5));
-  DateTime _lastPersonalTimestamp = DateTime.now().toUtc().subtract(const Duration(seconds: 5));
+  DateTime _lastBroadcastTimestamp =
+      DateTime.now().toUtc().subtract(const Duration(seconds: 5));
+  DateTime _lastPersonalTimestamp =
+      DateTime.now().toUtc().subtract(const Duration(seconds: 5));
 
   StreamSubscription? _broadcastSub;
   StreamSubscription? _personalSub;
@@ -42,7 +47,8 @@ class PushNotificationService {
     if (_isInitialized) return;
 
     try {
-      const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/launcher_icon');
       const darwinSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
@@ -59,8 +65,9 @@ class PushNotificationService {
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
 
-      final androidPlugin = _localNotifications.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+      final androidPlugin =
+          _localNotifications.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
 
       if (androidPlugin != null) {
         await androidPlugin.requestNotificationsPermission();
@@ -68,7 +75,8 @@ class PushNotificationService {
         const emergencyChannel = AndroidNotificationChannel(
           'emergency_blood_channel',
           'Emergency Blood Appeals & Shortages',
-          description: 'High-priority emergency blood alerts requiring immediate response.',
+          description:
+              'High-priority emergency blood alerts requiring immediate response.',
           importance: Importance.max,
           playSound: true,
           enableVibration: true,
@@ -79,7 +87,8 @@ class PushNotificationService {
         const communityChannel = AndroidNotificationChannel(
           'community_updates_channel',
           'Community & Personal Updates',
-          description: 'Donor verifications, hospital updates, and fulfillment milestones.',
+          description:
+              'Donor verifications, hospital updates, and fulfillment milestones.',
           importance: Importance.high,
           playSound: true,
           enableVibration: true,
@@ -157,7 +166,8 @@ class PushNotificationService {
   }) {
     _notificationsPausedUntil = notificationsPausedUntil;
     if (notificationPreferences != null) {
-      _notificationPreferences = Map<String, dynamic>.from(notificationPreferences);
+      _notificationPreferences =
+          Map<String, dynamic>.from(notificationPreferences);
     }
   }
 
@@ -188,7 +198,8 @@ class PushNotificationService {
       final androidDetails = AndroidNotificationDetails(
         'emergency_blood_channel',
         'Emergency Blood Appeals & Shortages',
-        channelDescription: 'High-priority emergency blood alerts requiring immediate response.',
+        channelDescription:
+            'High-priority emergency blood alerts requiring immediate response.',
         importance: Importance.max,
         priority: Priority.high,
         ticker: 'Emergency Blood Alert',
@@ -221,7 +232,8 @@ class PushNotificationService {
         iOS: darwinDetails,
       );
 
-      final int notifId = DateTime.now().microsecondsSinceEpoch.remainder(2147483647);
+      final int notifId =
+          DateTime.now().microsecondsSinceEpoch.remainder(2147483647);
       await _localNotifications.show(
         notifId,
         title,
@@ -245,7 +257,8 @@ class PushNotificationService {
       final androidDetails = AndroidNotificationDetails(
         'community_updates_channel',
         'Community & Personal Updates',
-        channelDescription: 'Donor verifications, hospital updates, and fulfillment milestones.',
+        channelDescription:
+            'Donor verifications, hospital updates, and fulfillment milestones.',
         importance: Importance.high,
         priority: Priority.high,
         color: const Color(0xFFA41235),
@@ -263,7 +276,8 @@ class PushNotificationService {
         iOS: darwinDetails,
       );
 
-      final int notifId = DateTime.now().microsecondsSinceEpoch.remainder(2147483647);
+      final int notifId =
+          DateTime.now().microsecondsSinceEpoch.remainder(2147483647);
       await _localNotifications.show(
         notifId,
         title,
@@ -273,6 +287,35 @@ class PushNotificationService {
       );
     } catch (e) {
       debugPrint("Error showing community notification: $e");
+    }
+  }
+
+  /// Sends a celebratory or countdown reminder notification for the 90-day WHO recovery window.
+  Future<void> showEligibilityCountdownReminder({
+    required int daysRemaining,
+    String? bloodType,
+    DateTime? nextEligibleDate,
+  }) async {
+    final bg = (bloodType != null && bloodType.trim().isNotEmpty)
+        ? bloodType.trim().toUpperCase()
+        : 'Donor';
+    if (daysRemaining <= 0) {
+      await showCommunityNotification(
+        title: '🩸 You Are Eligible to Donate Again!',
+        body:
+            'Your 90-day WHO recovery window is complete. Your $bg blood can save up to 3 lives today!',
+        payload: jsonEncode({'screen': '/home', 'type': 'eligibility_ready'}),
+      );
+    } else {
+      final dateLabel = nextEligibleDate != null
+          ? '${nextEligibleDate.day}/${nextEligibleDate.month}/${nextEligibleDate.year}'
+          : 'in $daysRemaining days';
+      await showCommunityNotification(
+        title: '⏳ Recovery Countdown Armed ($daysRemaining days left)',
+        body:
+            'We will remind you when your 90-day recovery window finishes on $dateLabel.',
+        payload: jsonEncode({'screen': '/profile', 'type': 'eligibility_countdown'}),
+      );
     }
   }
 
@@ -363,7 +406,8 @@ class PushNotificationService {
                     userCity.toLowerCase().contains(targetCity.toLowerCase()));
 
             if (matchesBlood && matchesCity) {
-              final title = (row['title'] ?? 'Emergency Blood Alert').toString();
+              final title =
+                  (row['title'] ?? 'Emergency Blood Alert').toString();
               final message =
                   (row['message'] ?? 'Critical shortage reported in your area.')
                       .toString();

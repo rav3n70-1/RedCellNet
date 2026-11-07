@@ -2112,6 +2112,28 @@ class _ProfilePageState extends State<ProfilePage> {
 
           final int verifiedDonationCount =
               (userData['totalDonations'] as int?) ?? 0;
+          final List<dynamic> historyList =
+              history is List ? history : const <dynamic>[];
+          final bool isStreakFrozen = userData['streakFrozen'] == true ||
+              AppSettingsService().isStreakFrozen;
+          final String? streakFreezeReason =
+              userData['streakFreezeReason']?.toString() ??
+                  AppSettingsService().streakFreezeReason;
+          final int computedStreak = AppSettingsService().computeDonorStreak(
+            historyList,
+            isFrozenOverride: isStreakFrozen,
+            fallbackDonationsCount: verifiedDonationCount,
+          );
+          final String referralCode = (userData['referralCode'] ?? '')
+                  .toString()
+                  .trim()
+                  .isNotEmpty
+              ? userData['referralCode'].toString().trim()
+              : AppSettingsService.generateReferralCode(
+                  userId: currentUserId,
+                  fullName: name,
+                  bloodGroup: bloodType,
+                );
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -2187,10 +2209,31 @@ class _ProfilePageState extends State<ProfilePage> {
                   emergencyContact: emergencyContactPhone.isNotEmpty
                       ? emergencyContactPhone
                       : phone,
+                  points: points,
+                  streakCount: computedStreak,
+                  isStreakFrozen: isStreakFrozen,
+                  streakFreezeReason: streakFreezeReason,
+                  isEligible: eligibility.isEligible,
+                  daysUntilEligible: eligibility.daysRemaining,
+                  city: city,
+                  isPhoneVerified: isPhoneVerified,
+                  medicalNotes: medicalNotes,
+                  referralCode: referralCode,
+                  showActionDock: true,
+                  onStreakFreezeChanged: (frozen) {
+                    if (currentUserId != null && currentUserId!.isNotEmpty) {
+                      _profileService.toggleMedicalStreakFreeze(
+                        uid: currentUserId!,
+                        frozen: frozen,
+                        reason: AppSettingsService().streakFreezeReason,
+                      );
+                    }
+                    if (mounted) setState(() {});
+                  },
                 ),
                 const SizedBox(height: 12),
 
-                // --- Clinical Safety & Compatibility Quick Hub ---
+                // --- Clinical Safety, Compatibility & Zero-Cost Wellness Quick Hub ---
                 Row(
                   children: [
                     Expanded(
@@ -2212,12 +2255,15 @@ class _ProfilePageState extends State<ProfilePage> {
                               Icon(Icons.checklist_rounded,
                                   size: 16, color: Color(0xFF10B981)),
                               SizedBox(width: 6),
-                              Text(
-                                '60s Self-Triage',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF10B981),
+                              Flexible(
+                                child: Text(
+                                  '60s Self-Triage',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF10B981),
+                                  ),
                                 ),
                               ),
                             ],
@@ -2246,12 +2292,135 @@ class _ProfilePageState extends State<ProfilePage> {
                               Icon(Icons.sync_alt_rounded,
                                   size: 16, color: AppColors.primary),
                               SizedBox(width: 6),
-                              Text(
-                                'Compatibility',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.primary,
+                              Flexible(
+                                child: Text(
+                                  'Compatibility',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => showHealthJournalSheet(
+                          context,
+                          donorName: name,
+                          bloodType: bloodType,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 11, horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.cardBg(context),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: AppColors.secondary
+                                    .withValues(alpha: 0.35)),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.monitor_heart_rounded,
+                                  size: 15, color: AppColors.secondary),
+                              SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  'Hb & Health Log',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.secondary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => showCommunityLeaderboardSheet(
+                          context,
+                          userCity: city,
+                          referralCode: referralCode,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 11, horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.cardBg(context),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: AppColors.imperialGold
+                                    .withValues(alpha: 0.40)),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.emoji_events_rounded,
+                                  size: 15, color: AppColors.imperialGold),
+                              SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  'Top Heroes',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.imperialGold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => showBloodCampCalendarSheet(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 11, horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.cardBg(context),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color:
+                                    AppColors.accent.withValues(alpha: 0.35)),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.event_available_rounded,
+                                  size: 15, color: AppColors.accent),
+                              SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  'Blood Camps',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.accent,
+                                  ),
                                 ),
                               ),
                             ],
